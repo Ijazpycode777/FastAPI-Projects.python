@@ -1,3 +1,4 @@
+from datetime import datetime
 from database import conn, cur
 import psycopg2
 import uuid
@@ -7,16 +8,23 @@ from pydantic import BaseModel, Field, field_validator
 
 app = FastAPI()
 
-class Expense(BaseModel):
+class ExpenseResponse(BaseModel):
+    id: UUID
+    expense: str
+    amount: float
+    created_at: datetime
+
+class ExpenseCreate(BaseModel):
     expense: str
     amount: float = Field(gt=0, le=1_000_000)
+
     @field_validator("expense")
     @classmethod
-    def validate_expense(cls,value):
-        value=value.strip()
+    def validate_expense(cls, value):
+        value = value.strip()
         if not value:
             raise ValueError("Expense name cannot be empty!")
-        if len(value)>100:
+        if len(value) > 100:
             raise ValueError("Expense name is too long!")
         return value
 
@@ -30,8 +38,8 @@ def create_table():
     conn.commit()
 create_table()
 
-@app.post("/expenses", status_code=201)
-def add_expense(expense: Expense):
+@app.post("/expenses", status_code=201, response_model=ExpenseResponse)
+def add_expense(expense: ExpenseCreate):
     try:
         expense_id = uuid.uuid4()
 
@@ -45,6 +53,9 @@ def add_expense(expense: Expense):
         )
 
         new_expense = cur.fetchone()
+        if new_expense is None:
+            conn.rollback()
+            raise HTTPException(status_code=500, detail="Failed to insert expense.")
         conn.commit()
 
         return {
@@ -65,7 +76,7 @@ def add_expense(expense: Expense):
 def home():
     return {"message": "Expensecal API is running"}
 
-@app.get("/expenses")
+@app.get("/expenses", response_model=list[ExpenseResponse])
 def show_expenses():
     cur.execute("""SELECT id, expense, amount, created_at FROM expenses ORDER BY created_at DESC""")
     expenses=cur.fetchall()
@@ -79,7 +90,7 @@ def show_expenses():
         for expense in expenses
     ]
 
-@app.get("/expenses/{expense_id}")
+@app.get("/expenses/{expense_id}", response_model=ExpenseResponse)
 def get_expense(expense_id:UUID):
     cur.execute("""SELECT id, expense, amount, created_at FROM expenses WHERE id=%s""",
     (str(expense_id),))
@@ -91,7 +102,7 @@ def get_expense(expense_id:UUID):
         "expense": expense[1],
         "amount": expense[2],
         "created_at": expense[3]
-    }  
+    }
 
 @app.delete("/expenses/{expense_id}",status_code=204)
 def delete_expense(expense_id:UUID):
@@ -105,8 +116,8 @@ def delete_expense(expense_id:UUID):
         conn.rollback()
         raise HTTPException(status_code=500,detail=str(e))
     
-@app.put("/expenses/{expense_id}")
-def update_expense(expense_id:UUID,expense:Expense):
+@app.put("/expenses/{expense_id}", response_model=ExpenseResponse)
+def update_expense(expense_id:UUID, expense: ExpenseCreate):
     try:
         cur.execute("""UPDATE expenses SET expense=%s, amount=%s
         WHERE id=%s RETURNING id, expense, amount, created_at""", (expense.expense, expense.amount,str(expense_id)))
@@ -116,10 +127,10 @@ def update_expense(expense_id:UUID,expense:Expense):
             raise HTTPException(status_code=404, detail="No expense found!")
         conn.commit()
         return {
-            "id":"updated_expense[0]",
-            "expense":"updated_expense[1]",
-            "amount":"updated_expense[2]",
-            "created_at":"updated_expense[3]"
+            "id": updated_expense[0],
+            "expense": updated_expense[1],
+            "amount": updated_expense[2],
+            "created_at": updated_expense[3]
         }
     except psycopg2.Error as e:
         conn.rollback()
