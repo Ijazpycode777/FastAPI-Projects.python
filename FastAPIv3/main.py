@@ -1,7 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field, field_validator
 from database import cur, conn
-from datetime import datetime
 import psycopg2
 import bcrypt
 
