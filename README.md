@@ -161,6 +161,73 @@ FastAPI also provides an alternative OpenAPI interface through:
 
 ---
 
+Bank Management System
+
+A practice banking backend built with FastAPI, PostgreSQL, Pydantic, and bcrypt. This project focuses on learning how backend APIs interact with a relational database and how multiple database operations can work together as a single transaction.
+
+Features
+
+- User registration
+- User login with bcrypt password hashing
+- Customer IDs using PostgreSQL "SERIAL"
+- Account balance management
+- Deposit funds
+- Withdraw funds
+- Insufficient-balance validation
+- Transaction history
+- PostgreSQL foreign-key relationship between customers and transactions
+- Pydantic request validation
+- Database transactions with commit and rollback
+- Swagger/OpenAPI documentation through FastAPI
+
+Database Structure
+
+The system uses two main tables:
+
+customers
+
+- "id"
+- "username"
+- "password"
+- "balance"
+- "created_at"
+
+transactions
+
+- "id"
+- "customer_id"
+- "amount"
+- "transaction_type"
+- "created_at"
+
+Each transaction is associated with a customer through a foreign key.
+
+API Endpoints
+
+Method| Endpoint| Purpose
+POST| "/register"| Register a new customer
+POST| "/login"| Authenticate a customer
+GET| "/balance/{user_id}"| Check account balance
+POST| "/deposit/{user_id}"| Deposit money
+POST| "/withdraw/{user_id}"| Withdraw money
+GET| "/transactions/{user_id}"| View transaction history
+
+What I Learned
+
+This project helped me practice:
+
+- Designing relational database tables
+- Using primary and foreign keys
+- Writing SQL queries from Python
+- Working with PostgreSQL transactions
+- Using Pydantic for request validation
+- Password hashing and verification with bcrypt
+- Handling database errors
+- Designing REST API endpoints
+- Keeping current account state separate from transaction history
+- Understanding how multiple database operations can be committed or rolled back together
+
+This is a learning project and is not intended to represent a production banking system.
 📌 Project Philosophy
 
 These projects are primarily learning projects, but they are being developed with real backend development practices in mind.
