@@ -135,4 +135,4 @@ def update_expense(expense_id:UUID, expense: ExpenseCreate):
     except psycopg2.Error as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
-    
+#End of file
