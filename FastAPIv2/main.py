@@ -5,9 +5,10 @@ import uuid
 from uuid import UUID
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field, field_validator
-
+#Initialze app
 app = FastAPI()
 
+#Response and request models
 class ExpenseResponse(BaseModel):
     id: UUID
     expense: str
@@ -15,19 +16,17 @@ class ExpenseResponse(BaseModel):
     created_at: datetime
 
 class ExpenseCreate(BaseModel):
-    expense: str
+    expense: str = Field(min_length=2, max_length=100)
     amount: float = Field(gt=0, le=1_000_000)
-
     @field_validator("expense")
     @classmethod
-    def validate_expense(cls, value):
+    def validate_expense_name(cls, value):
         value = value.strip()
         if not value:
-            raise ValueError("Expense name cannot be empty!")
-        if len(value) > 100:
-            raise ValueError("Expense name is too long!")
+            raise ValueError("Expense name cannot be empty or whitespace.")
         return value
-
+    
+#Postgres table creation
 def create_table():
     cur.execute('''CREATE TABLE IF NOT
     EXISTS expenses (id UUID PRIMARY KEY, 
@@ -38,6 +37,7 @@ def create_table():
     conn.commit()
 create_table()
 
+#API endpoints
 @app.post("/expenses", status_code=201, response_model=ExpenseResponse)
 def add_expense(expense: ExpenseCreate):
     try:
