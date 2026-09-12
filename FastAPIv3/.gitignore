@@ -1,4 +1,7 @@
-.env
+db.env
 __pycache__/
 *.pyc
 .vscode/
+jwt.env
+*.py[cod]
+.idea/

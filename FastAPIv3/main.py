@@ -1,10 +1,35 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel, Field, field_validator
 from database import cur, conn
 import psycopg2
 import bcrypt
+from datetime import datetime, timedelta, timezone
+import jwt
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from config import jwt_settings
 
 app = FastAPI()
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
+
+
+def create_access_token(user_id: int):
+    expire = datetime.now(timezone.utc) + timedelta(minutes=jwt_settings.access_token_expire_minutes)
+    payload = {"sub": str(user_id), "exp": expire}
+    token = jwt.encode(payload, jwt_settings.secret_key, algorithm=jwt_settings.algorithm)     
+    return token
+
+def get_current_user(token: str = Depends(oauth2_scheme)):
+    try:
+        payload = jwt.decode(token, jwt_settings.secret_key, algorithms=[jwt_settings.algorithm])
+        user_id = payload.get("sub")
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token has expired")
+    except jwt.PyJWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    return int(user_id)
 
 def create_table():
     cur.execute('''CREATE TABLE IF NOT
@@ -38,6 +63,14 @@ class RegisterRequest(BaseModel):
         if not value.isalnum():
             raise ValueError('Username must be alphanumeric')
         return value
+    @field_validator('password')
+    @classmethod
+    def validate_password(cls, value):
+        if not any(char.isdigit() for char in value):
+            raise ValueError('Password must contain at least one digit')
+        if not any(char.isalpha() for char in value):
+            raise ValueError('Password must contain at least one letter')
+        return value
 
 class LoginRequest(BaseModel):
     username: str = Field(..., min_length=3, max_length=50)
@@ -63,19 +96,20 @@ def register_user(request: RegisterRequest):
         raise HTTPException(status_code=400, detail="Username already exists")
 
 @app.post("/login")
-def login_user(request: LoginRequest):
-    username = request.username
+def login_user(form_request: OAuth2PasswordRequestForm = Depends()):
+    username = form_request.username
     cur.execute("SELECT id, password FROM customers WHERE username = %s", (username,))
     user = cur.fetchone()
     if not user:
         raise HTTPException(status_code=400, detail="Username does not exist")
     user_id, hashed_password = user
-    if not bcrypt.checkpw(request.password.encode('utf-8'), hashed_password.encode('utf-8')):
+    if not bcrypt.checkpw(form_request.password.encode('utf-8'), hashed_password.encode('utf-8')):
         raise HTTPException(status_code=400, detail="Invalid username or password")
-    return {"message": "Login successful", "user_id": user_id}
+    access_token = create_access_token(user_id=user_id)
+    return {"message": "Login successful", "access_token": access_token, "token_type": "bearer"}
 
-@app.get("/balance/{user_id}")
-def get_balance(user_id: int):
+@app.get("/balance")
+def get_balance(user_id: int = Depends(get_current_user)):
     try:
         cur.execute("SELECT balance FROM customers WHERE id = %s", (user_id,))
         balance = cur.fetchone()
@@ -85,8 +119,8 @@ def get_balance(user_id: int):
     except psycopg2.Error:
         raise HTTPException(status_code=500, detail="Failed to retrieve balance")
 
-@app.post("/deposit/{user_id}")
-def deposit(user_id: int, request: MoneyRequest):
+@app.post("/deposit")
+def deposit(request: MoneyRequest, user_id: int = Depends(get_current_user)):
     try:
         cur.execute("SELECT id FROM customers WHERE id = %s", (user_id,))
         user = cur.fetchone()
@@ -104,8 +138,8 @@ def deposit(user_id: int, request: MoneyRequest):
         conn.rollback()
         raise HTTPException(status_code=500, detail="Failed to deposit funds")
 
-@app.post("/withdraw/{user_id}")
-def withdraw(user_id: int, request: MoneyRequest):
+@app.post("/withdraw")
+def withdraw(request: MoneyRequest, user_id: int = Depends(get_current_user)):
     try:
         cur.execute("SELECT balance FROM customers WHERE id = %s", (user_id,))
         balance = cur.fetchone()
@@ -125,8 +159,8 @@ def withdraw(user_id: int, request: MoneyRequest):
         conn.rollback()
         raise HTTPException(status_code=500, detail="Failed to withdraw funds")
 
-@app.get("/transactions/{user_id}")
-def get_transactions(user_id: int):
+@app.get("/transactions")
+def get_transactions(user_id: int = Depends(get_current_user)):
     try:
         cur.execute("SELECT id FROM customers WHERE id = %s", (user_id,))
         user = cur.fetchone()
@@ -137,3 +171,18 @@ def get_transactions(user_id: int):
         return {"transactions": [{"amount": float(t[0]), "transaction_type": t[1], "created_at": t[2]} for t in transactions]}
     except psycopg2.Error:
         raise HTTPException(status_code=500, detail="Failed to retrieve transactions")    
+
+@app.put("/update_password")
+def update_password(request:RegisterRequest, user_id: int = Depends(get_current_user)):
+    try:
+        cur.execute("SELECT id FROM customers WHERE id = %s", (user_id,))
+        user = cur.fetchone()
+        if not user:
+            raise HTTPException(status_code=400, detail="User does not exist")
+        hashed_password = bcrypt.hashpw(request.password.encode('utf-8'), bcrypt.gensalt())
+        cur.execute("UPDATE customers SET password = %s WHERE id = %s", (hashed_password.decode('utf-8'), user_id))
+        conn.commit()
+        return {"message": "Password updated successfully"}
+    except psycopg2.Error:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail="Failed to update password")

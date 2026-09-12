@@ -11,6 +11,15 @@ class Settings(BaseSettings):
     database_host: str
     database_port: int
 
-    model_config = SettingsConfigDict(env_file=str(BASE_DIR / ".env"))
+    model_config = SettingsConfigDict(env_file=str(BASE_DIR / "db.env"))
 
 settings = Settings()
+
+class JWTSettings(BaseSettings):
+    secret_key: str
+    algorithm: str
+    access_token_expire_minutes: int
+
+    model_config = SettingsConfigDict(env_file=str(BASE_DIR / "jwt.env"))
+
+jwt_settings = JWTSettings()
