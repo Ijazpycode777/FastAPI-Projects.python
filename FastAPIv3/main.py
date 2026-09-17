@@ -29,7 +29,16 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
         raise HTTPException(status_code=401, detail="Token has expired")
     except jwt.PyJWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
-    return int(user_id)
+    cur.execute("SELECT id, username, role FROM customers WHERE id = %s", (user_id,))
+    user = cur.fetchone()   
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+    return {"id": user[0], "username": user[1], "role": user[2]}
+
+def require_admin(current_user = Depends(get_current_user)):
+    if current_user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return current_user
 
 def create_table():
     cur.execute('''CREATE TABLE IF NOT
@@ -186,3 +195,20 @@ def update_password(request:RegisterRequest, user_id: int = Depends(get_current_
     except psycopg2.Error:
         conn.rollback()
         raise HTTPException(status_code=500, detail="Failed to update password")
+
+@app.delete("/delete_account")
+def delete_account(user_id: int, current_user = Depends(require_admin)):  
+    if user_id==current_user["id"]:
+        raise HTTPException(status_code=403, detail="Admin cannot delete their own account!")
+    try:
+        cur.execute("SELECT id FROM customers WHERE id = %s", (user_id,))
+        user = cur.fetchone()
+        if not user:
+            raise HTTPException(status_code=404, detail="User does not exist")
+        cur.execute("DELETE FROM transactions WHERE customer_id = %s", (user_id,))
+        cur.execute("DELETE FROM customers WHERE id = %s", (user_id,))
+        conn.commit()
+        return {"message": "Account deleted successfully"}
+    except psycopg2.Error:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail="Failed to delete account")
