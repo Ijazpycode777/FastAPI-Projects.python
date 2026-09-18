@@ -88,6 +88,10 @@ class LoginRequest(BaseModel):
 class MoneyRequest(BaseModel):
     amount: float = Field(..., gt=0)
 
+class TransferRequest(BaseModel):
+    recipient_username: str = Field(..., min_length=3, max_length=50)
+    amount: float = Field(..., gt=0)
+
 
 @app.post("/register")
 def register_user(request: RegisterRequest):
@@ -212,3 +216,32 @@ def delete_account(user_id: int, current_user = Depends(require_admin)):
     except psycopg2.Error:
         conn.rollback()
         raise HTTPException(status_code=500, detail="Failed to delete account")
+
+@app.post("/transfer")
+def transfer_money(request: TransferRequest, current_user = Depends(get_current_user)):   
+    sender_id = current_user["id"]
+    recipient_username = request.recipient_username
+    amount = request.amount
+    try:
+        cur.execute("SELECT id FROM customers WHERE username = %s", (recipient_username,))
+        recipient= cur.fetchone()
+        if not recipient:
+            raise HTTPException(status_code=404, detail="Recipient does not exist") 
+        recipient_id = recipient[0]
+        if sender_id == recipient_id:
+            raise HTTPException(status_code=400, detail="Cannot transfer to self")  
+        cur.execute("SELECT balance FROM customers WHERE id = %s", (sender_id,))
+        sender = cur.fetchone()
+        if not sender:
+            raise HTTPException(status_code=404, detail="Sender does not exist")
+        sender_balance = sender[0]
+        if sender_balance < amount:
+            raise HTTPException(status_code=400, detail="Insufficient funds")
+        cur.execute("UPDATE customers SET balance = balance - %s WHERE id = %s", (amount, sender_id))
+        cur.execute("UPDATE customers SET balance = balance + %s WHERE id = %s", (amount, recipient_id))
+        cur.execute("INSERT INTO transactions (customer_id, amount, transaction_type) VALUES (%s, %s, 'withdrawal')", (sender_id, amount))
+        cur.execute("INSERT INTO transactions (customer_id, amount, transaction_type) VALUES (%s, %s, 'deposit')", (recipient_id, amount))
+        conn.commit()
+    except psycopg2.Error:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail="Failed to transfer funds")
