@@ -122,8 +122,9 @@ def login_user(form_request: OAuth2PasswordRequestForm = Depends()):
     return {"message": "Login successful", "access_token": access_token, "token_type": "bearer"}
 
 @app.get("/balance")
-def get_balance(user_id: int = Depends(get_current_user)):
+def get_balance(current_user = Depends(get_current_user)):
     try:
+        user_id = current_user["id"]
         cur.execute("SELECT balance FROM customers WHERE id = %s", (user_id,))
         balance = cur.fetchone()
         if not balance:
@@ -133,8 +134,9 @@ def get_balance(user_id: int = Depends(get_current_user)):
         raise HTTPException(status_code=500, detail="Failed to retrieve balance")
 
 @app.post("/deposit")
-def deposit(request: MoneyRequest, user_id: int = Depends(get_current_user)):
+def deposit(request: MoneyRequest, current_user = Depends(get_current_user)):
     try:
+        user_id = current_user["id"]
         cur.execute("SELECT id FROM customers WHERE id = %s", (user_id,))
         user = cur.fetchone()
         if not user:
@@ -152,8 +154,9 @@ def deposit(request: MoneyRequest, user_id: int = Depends(get_current_user)):
         raise HTTPException(status_code=500, detail="Failed to deposit funds")
 
 @app.post("/withdraw")
-def withdraw(request: MoneyRequest, user_id: int = Depends(get_current_user)):
+def withdraw(request: MoneyRequest, current_user = Depends(get_current_user)):
     try:
+        user_id = current_user["id"]
         cur.execute("SELECT balance FROM customers WHERE id = %s", (user_id,))
         balance = cur.fetchone()
         if not balance:
@@ -173,8 +176,9 @@ def withdraw(request: MoneyRequest, user_id: int = Depends(get_current_user)):
         raise HTTPException(status_code=500, detail="Failed to withdraw funds")
 
 @app.get("/transactions")
-def get_transactions(user_id: int = Depends(get_current_user)):
+def get_transactions(current_user = Depends(get_current_user)):
     try:
+        user_id = current_user["id"]
         cur.execute("SELECT id FROM customers WHERE id = %s", (user_id,))
         user = cur.fetchone()
         if not user:
@@ -186,8 +190,9 @@ def get_transactions(user_id: int = Depends(get_current_user)):
         raise HTTPException(status_code=500, detail="Failed to retrieve transactions")    
 
 @app.put("/update_password")
-def update_password(request:RegisterRequest, user_id: int = Depends(get_current_user)):
+def update_password(request:RegisterRequest, current_user = Depends(get_current_user)):
     try:
+        user_id = current_user["id"]
         cur.execute("SELECT id FROM customers WHERE id = %s", (user_id,))
         user = cur.fetchone()
         if not user:
@@ -201,16 +206,16 @@ def update_password(request:RegisterRequest, user_id: int = Depends(get_current_
         raise HTTPException(status_code=500, detail="Failed to update password")
 
 @app.delete("/delete_account")
-def delete_account(user_id: int, current_user = Depends(require_admin)):  
-    if user_id==current_user["id"]:
+def delete_account(username : str, current_user = Depends(require_admin)):  
+    if username==current_user["username"]:
         raise HTTPException(status_code=403, detail="Admin cannot delete their own account!")
     try:
-        cur.execute("SELECT id FROM customers WHERE id = %s", (user_id,))
+        cur.execute("SELECT id FROM customers WHERE username = %s", (username,))
         user = cur.fetchone()
         if not user:
             raise HTTPException(status_code=404, detail="User does not exist")
-        cur.execute("DELETE FROM transactions WHERE customer_id = %s", (user_id,))
-        cur.execute("DELETE FROM customers WHERE id = %s", (user_id,))
+        cur.execute("DELETE FROM transactions WHERE customer_id = %s", (user[0],))
+        cur.execute("DELETE FROM customers WHERE id = %s", (user[0],))
         conn.commit()
         return {"message": "Account deleted successfully"}
     except psycopg2.Error:
@@ -242,6 +247,7 @@ def transfer_money(request: TransferRequest, current_user = Depends(get_current_
         cur.execute("INSERT INTO transactions (customer_id, amount, transaction_type) VALUES (%s, %s, 'withdrawal')", (sender_id, amount))
         cur.execute("INSERT INTO transactions (customer_id, amount, transaction_type) VALUES (%s, %s, 'deposit')", (recipient_id, amount))
         conn.commit()
+        return {"message": "Transfer successful! Transferred ${:.2f} to {}".format(amount, recipient_username)}
     except psycopg2.Error:
         conn.rollback()
         raise HTTPException(status_code=500, detail="Failed to transfer funds")
