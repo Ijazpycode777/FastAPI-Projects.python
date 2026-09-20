@@ -42,12 +42,16 @@ def require_admin(current_user = Depends(get_current_user)):
 
 def create_table():
     cur.execute('''CREATE TABLE IF NOT
-    EXISTS customers (id SERIAL PRIMARY KEY,
+EXISTS customers (
+    id SERIAL PRIMARY KEY,
     username VARCHAR(50) NOT NULL UNIQUE,
     password VARCHAR(61) NOT NULL,
     balance NUMERIC(10,2) NOT NULL DEFAULT 0.00 CHECK (balance >= 0),
-    created_at TIMESTAMPTZ NOT NULL
-    DEFAULT CURRENT_TIMESTAMP)''')
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    role VARCHAR(20) NOT NULL DEFAULT 'customer'
+        CHECK (role IN ('customer', 'admin'))
+)''')
+
     conn.commit()
 
 def transaction_table():
@@ -80,10 +84,6 @@ class RegisterRequest(BaseModel):
         if not any(char.isalpha() for char in value):
             raise ValueError('Password must contain at least one letter')
         return value
-
-class LoginRequest(BaseModel):
-    username: str = Field(..., min_length=3, max_length=50)
-    password: str = Field(..., min_length=8, max_length=50)
 
 class MoneyRequest(BaseModel):
     amount: float = Field(..., gt=0)
