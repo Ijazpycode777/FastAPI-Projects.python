@@ -242,12 +242,16 @@ def transfer_money(request: TransferRequest, current_user = Depends(get_current_
         sender_balance = sender[0]
         if sender_balance < amount:
             raise HTTPException(status_code=400, detail="Insufficient funds")
-        cur.execute("UPDATE customers SET balance = balance - %s WHERE id = %s", (amount, sender_id))
+        cur.execute("UPDATE customers SET balance = balance - %s WHERE id = %s AND balance >= %s RETURNING balance", (amount, sender_id, amount))
+        sender_new_balance = cur.fetchone()
+        if  sender_new_balance is None:
+            raise HTTPException(status_code=400, detail="Insufficient funds")
+        new_balance = sender_new_balance[0]
         cur.execute("UPDATE customers SET balance = balance + %s WHERE id = %s", (amount, recipient_id))
         cur.execute("INSERT INTO transactions (customer_id, amount, transaction_type) VALUES (%s, %s, 'withdrawal')", (sender_id, amount))
         cur.execute("INSERT INTO transactions (customer_id, amount, transaction_type) VALUES (%s, %s, 'deposit')", (recipient_id, amount))
         conn.commit()
-        return {"message": "Transfer successful! Transferred ${:.2f} to {}".format(amount, recipient_username)}
+        return {"message": "Transfer successful! Transferred ${:.2f} to {} , New Balance: ${:.2f}".format(amount, recipient_username, new_balance)}
     except psycopg2.Error:
         conn.rollback()
         raise HTTPException(status_code=500, detail="Failed to transfer funds")
