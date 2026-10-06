@@ -1,0 +1,7 @@
+.env
+jwt.env
+__pycache__/
+*.pyc
+.vscode/
+.idea/
+*.py[cod]
