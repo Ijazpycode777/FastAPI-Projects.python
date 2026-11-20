@@ -1,0 +1,130 @@
+"""Student management routes (admin) + student self-service."""
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy import or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.exceptions import ForbiddenError, NotFoundError
+from app.database.session import get_db
+from app.models.people import Student
+from app.models.user import User
+from app.schemas.common import Page, paginate
+from app.schemas.people import (
+    BoardRecordIn,
+    BoardRecordOut,
+    PromoteIn,
+    StudentCreateIn,
+    StudentDetailOut,
+    StudentOut,
+    StudentUpdateIn,
+)
+from app.security.dependencies import get_current_user, require_admin, require_student
+from app.services import student_service
+
+router = APIRouter(prefix="/students", tags=["students"])
+
+
+@router.get("", response_model=Page[StudentOut])
+async def list_students(
+    q: str | None = Query(None),
+    program_id: str | None = Query(None),
+    class_id: str | None = Query(None),
+    status: str | None = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=200),
+    admin: User = Depends(require_admin()),
+    db: AsyncSession = Depends(get_db),
+):
+    stmt = select(Student)
+    if q:
+        like = f"%{q.lower()}%"
+        stmt = stmt.where(or_(Student.full_name.ilike(like), Student.admission_number.ilike(like), Student.email.ilike(like)))
+    if program_id:
+        stmt = stmt.where(Student.current_program_id == program_id)
+    if class_id:
+        stmt = stmt.where(Student.current_class_id == class_id)
+    if status:
+        stmt = stmt.where(Student.account_status == status)
+    total = (await db.execute(select(__import__("sqlalchemy").func.count()).select_from(stmt.subquery()))).scalar_one()
+    rows = (await db.execute(stmt.order_by(Student.created_at.desc()).offset((page - 1) * page_size).limit(page_size))).scalars().all()
+    return paginate([StudentOut.model_validate(r) for r in rows], page, page_size, int(total or 0))
+
+
+@router.post("", response_model=StudentOut, dependencies=[Depends(require_admin())])
+async def create_student(payload: StudentCreateIn, admin: User = Depends(require_admin()), db: AsyncSession = Depends(get_db)):
+    student = await student_service.create_student(db, admin, payload.model_dump())
+    return StudentOut.model_validate(student)
+
+
+@router.get("/{student_id}", response_model=StudentDetailOut)
+async def get_student(student_id: str, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    if user.role == "student" and str(user.student_profile.id) != str(student_id):
+        raise ForbiddenError("You can only view your own profile.")
+    student = await db.get(Student, student_id)
+    if student is None:
+        raise NotFoundError("Student not found.")
+    return StudentDetailOut.model_validate(student)
+
+
+@router.patch("/{student_id}", response_model=StudentOut, dependencies=[Depends(require_admin())])
+async def update_student(student_id: str, payload: StudentUpdateIn, admin: User = Depends(require_admin()), db: AsyncSession = Depends(get_db)):
+    student = await db.get(Student, student_id)
+    if student is None:
+        raise NotFoundError("Student not found.")
+    student = await student_service.update_student(db, admin, student, payload.model_dump(exclude_unset=True))
+    return StudentOut.model_validate(student)
+
+
+@router.post("/{student_id}/deactivate", response_model=StudentOut, dependencies=[Depends(require_admin())])
+async def deactivate(student_id: str, admin: User = Depends(require_admin()), db: AsyncSession = Depends(get_db)):
+    student = await db.get(Student, student_id)
+    if student is None:
+        raise NotFoundError("Student not found.")
+    return StudentOut.model_validate(await student_service.toggle_active(db, admin, student, False))
+
+
+@router.post("/{student_id}/activate", response_model=StudentOut, dependencies=[Depends(require_admin())])
+async def activate(student_id: str, admin: User = Depends(require_admin()), db: AsyncSession = Depends(get_db)):
+    student = await db.get(Student, student_id)
+    if student is None:
+        raise NotFoundError("Student not found.")
+    return StudentOut.model_validate(await student_service.toggle_active(db, admin, student, True))
+
+
+@router.post("/promote", response_model=StudentOut, dependencies=[Depends(require_admin())])
+async def promote(payload: PromoteIn, admin: User = Depends(require_admin()), db: AsyncSession = Depends(get_db)):
+    student = await student_service.promote(db, admin, payload.model_dump())
+    return StudentOut.model_validate(student)
+
+
+# ---------------- Board records ----------------
+@router.post("/{student_id}/board-records", response_model=BoardRecordOut, dependencies=[Depends(require_admin())])
+async def add_board_record(student_id: str, payload: BoardRecordIn, admin: User = Depends(require_admin()), db: AsyncSession = Depends(get_db)):
+    from app.models.people import BoardExaminationRecord
+    student = await db.get(Student, student_id)
+    if student is None:
+        raise NotFoundError("Student not found.")
+    rec = BoardExaminationRecord(student_id=student_id, level=payload.level, board=payload.board,
+                                 examination_year=payload.examination_year, total_marks=payload.total_marks,
+                                 obtained_marks=payload.obtained_marks, grade=payload.grade)
+    db.add(rec)
+    await db.commit()
+    await db.refresh(rec)
+    return BoardRecordOut.model_validate(rec)
+
+
+@router.get("/{student_id}/board-records", response_model=list[BoardRecordOut])
+async def list_board_records(student_id: str, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    if user.role == "student" and str(user.student_profile.id) != str(student_id):
+        raise ForbiddenError("You can only view your own records.")
+    from app.models.people import BoardExaminationRecord
+    rows = await db.execute(select(BoardExaminationRecord).where(BoardExaminationRecord.student_id == student_id))
+    return [BoardRecordOut.model_validate(r) for r in rows.scalars().all()]
+
+
+# ---------------- Student self: attendance / results / fees ----------------
+@router.get("/me/attendance", tags=["student-self"])
+async def my_attendance(user: User = Depends(require_student()), db: AsyncSession = Depends(get_db)):
+    from app.services.attendance_service import student_percentage
+    return await student_percentage(db, str(user.student_profile.id))
