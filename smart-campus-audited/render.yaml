@@ -1,0 +1,57 @@
+# Render Blueprint for Smart Campus.
+# Docs: https://render.com/docs/blueprint-spec
+# Apply with: `render blueprint deploy` or via the Render dashboard.
+
+databases:
+  - name: smartcampus-db
+    plan: starter
+    databaseName: smartcampus
+    ipAllowList: []        # allow Render-internal services only by default
+
+services:
+  - type: web
+    name: smartcampus
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: smartcampus-db
+          property: connectionString
+      # Render provides a postgres:// URL; we need the asyncpg driver variant.
+      - key: DATABASE_URL_ASYNC
+        fromDatabase:
+          name: smartcampus-db
+          property: connectionString
+      - key: SESSION_SECRET_KEY
+        sync: false
+        generateValue: true
+      - key: SESSION_COOKIE_SECURE
+        value: "true"
+      - key: SESSION_COOKIE_SAMESITE
+        value: lax
+      - key: CORS_ALLOWED_ORIGINS
+        value: "https://smartcampus.onrender.com"
+      - key: STORAGE_BACKEND
+        value: local
+      - key: STORAGE_LOCAL_PATH
+        value: /var/data/materials
+      - key: SEED_ADMIN_EMAIL
+        value: admin@smartcampus.edu
+      - key: SEED_ADMIN_PASSWORD
+        sync: false
+        generateValue: true
+      - key: SEED_RESET_ON_START
+        value: "true"
+      - key: PORT
+        value: "8000"
+    disk:
+      name: smartcampus-storage
+      mountPath: /var/data
+      sizeGB: 5
