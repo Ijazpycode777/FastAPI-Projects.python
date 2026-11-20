@@ -23,6 +23,7 @@ const StudentListPage = lazy(() => import("@/features/students/StudentListPage")
 const StudentDetailPage = lazy(() => import("@/features/students/StudentDetailPage").then((m) => ({ default: m.StudentDetailPage })));
 const StudentFormPage = lazy(() => import("@/features/students/StudentFormPage").then((m) => ({ default: m.StudentFormPage })));
 const TeacherListPage = lazy(() => import("@/features/teachers/TeacherListPage").then((m) => ({ default: m.TeacherListPage })));
+const TeacherDetailPage = lazy(() => import("@/features/teachers/TeacherDetailPage").then((m) => ({ default: m.TeacherDetailPage })));
 const TeacherFormPage = lazy(() => import("@/features/teachers/TeacherFormPage").then((m) => ({ default: m.TeacherFormPage })));
 const AttendanceMarkingPage = lazy(() => import("@/features/attendance/AttendanceMarkingPage").then((m) => ({ default: m.AttendanceMarkingPage })));
 const AttendanceHistoryPage = lazy(() => import("@/features/attendance/AttendanceHistoryPage").then((m) => ({ default: m.AttendanceHistoryPage })));
@@ -76,6 +77,7 @@ export function AppRoutes() {
           {/* Teachers */}
           <Route path="teachers" element={<Protected roles={["admin"]}><TeacherListPage /></Protected>} />
           <Route path="teachers/new" element={<Protected roles={["admin"]}><TeacherFormPage /></Protected>} />
+          <Route path="teachers/:id" element={<Protected roles={["admin"]}><TeacherDetailPage /></Protected>} />
 
           {/* Attendance */}
           <Route path="attendance/mark" element={<Protected roles={["teacher"]}><AttendanceMarkingPage /></Protected>} />

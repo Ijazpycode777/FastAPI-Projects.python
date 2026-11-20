@@ -57,5 +57,5 @@ export function AttendanceHistoryPage() {
 }
 
 function Mini({ label, value }: { label: string; value: number | string }) {
-  return <div className="card p-4 text-center"><p className="text-xs text-slate-muted">{label}</p><p className="text-xl font-bold text-navy mt-0.5">{value}</p></div>;
+  return <div className="card p-4 text-center"><p className="text-xs text-slate-muted">{label}</p><p className="text-xl font-bold text-ink mt-0.5">{value}</p></div>;
 }

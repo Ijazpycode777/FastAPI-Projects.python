@@ -11,7 +11,7 @@ export function CardHeader({ title, subtitle, action }: { title: string; subtitl
   return (
     <div className="flex items-start justify-between gap-3 border-b border-slate-border px-5 py-4">
       <div>
-        <h3 className="font-semibold text-navy">{title}</h3>
+        <h3 className="font-semibold text-ink">{title}</h3>
         {subtitle && <p className="text-xs text-slate-muted mt-0.5">{subtitle}</p>}
       </div>
       {action}
@@ -28,7 +28,7 @@ export function PageHeader({ title, description, action }: { title: string; desc
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
       <div>
-        <h1 className="text-xl font-bold text-navy sm:text-2xl">{title}</h1>
+        <h1 className="text-xl font-bold text-ink sm:text-2xl">{title}</h1>
         {description && <p className="text-sm text-slate-muted mt-1">{description}</p>}
       </div>
       {action && <div className="flex items-center gap-2">{action}</div>}
@@ -48,7 +48,7 @@ export function EmptyState({ icon: Icon, title, description, action }: { icon?: 
           <Icon size={22} />
         </div>
       )}
-      <p className="font-semibold text-navy">{title}</p>
+      <p className="font-semibold text-ink">{title}</p>
       {description && <p className="text-sm text-slate-muted mt-1 max-w-sm">{description}</p>}
       {action && <div className="mt-4">{action}</div>}
     </div>
@@ -97,8 +97,8 @@ export function Modal({ open, onClose, title, children, footer }: { open: boolea
       <div className="absolute inset-0 bg-navy/40" onClick={onClose} />
       <div className="relative w-full max-w-lg card animate-slideUp">
         <div className="flex items-center justify-between border-b border-slate-border px-5 py-3.5">
-          <h3 className="font-semibold text-navy">{title}</h3>
-          <button onClick={onClose} className="text-slate-muted hover:text-navy" aria-label="Close">✕</button>
+          <h3 className="font-semibold text-ink">{title}</h3>
+          <button onClick={onClose} className="text-slate-muted hover:text-ink" aria-label="Close">✕</button>
         </div>
         <div className="px-5 py-4 max-h-[70vh] overflow-y-auto">{children}</div>
         {footer && <div className="flex justify-end gap-2 border-t border-slate-border px-5 py-3">{footer}</div>}
@@ -108,7 +108,7 @@ export function Modal({ open, onClose, title, children, footer }: { open: boolea
 }
 
 export function StatCard({ label, value, hint, tone = "neutral", icon: Icon }: { label: string; value: number | string; hint?: string; tone?: string; icon?: LucideIcon }) {
-  const toneText: Record<string, string> = { primary: "text-indigo", success: "text-teal", warning: "text-amber", danger: "text-rose", neutral: "text-navy" };
+  const toneText: Record<string, string> = { primary: "text-indigo", success: "text-teal", warning: "text-amber", danger: "text-rose", neutral: "text-ink" };
   const toneBg: Record<string, string> = { primary: "bg-indigo/10", success: "bg-teal/10", warning: "bg-amber/10", danger: "bg-rose/10", neutral: "bg-slate-bg" };
   return (
     <div className="stat-card">

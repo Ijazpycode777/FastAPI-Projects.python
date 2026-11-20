@@ -7,8 +7,8 @@ async def _create_student(admin_client, setup, email="student.s1@test.edu", n=1)
         "full_name": "Student One", "email": email, "phone": "+923000000001",
         "date_of_birth": "2007-03-15", "gender": "male",
         "admission_date": "2025-08-01",
-        "program_id": setup["program_id"], "class_id": setup["class_id"],
-        "section_id": setup["section_id"], "academic_session_id": setup["session_id"],
+        "program": setup["program_name"], "class_name": setup["class_name"],
+        "section": setup["section_name"], "academic_session": setup["session_name"],
         "password": "Student!2025",
         "guardian": {"name": "Mr One", "phone": "+923001110001", "relationship_type": "Father"},
         "matric_board": "BISE Lahore", "matric_year": 2023,
@@ -58,3 +58,73 @@ async def test_student_cannot_access_admin_reports(admin_client, client, academi
     await login_as(client, "student.c@test.edu", "Student!2025")
     resp = await client.get("/api/v1/students?page=1")
     assert resp.status_code == 403
+
+
+async def test_student_create_freetext_find_or_creates_rows(admin_client):
+    """Free-text placement with brand-new names creates the academic rows."""
+    resp = await admin_client.post("/api/v1/students", json={
+        "full_name": "Free Text", "email": "freetext.s@test.edu",
+        "admission_date": "2025-08-01",
+        "program": "BSCS", "class_name": "Year 1", "section": "Blue",
+        "academic_session": "2025-2026", "password": "Student!2025",
+    })
+    assert resp.status_code == 200, resp.text
+    sid = resp.json()["id"]
+
+    # The typed rows must now exist.
+    progs = (await admin_client.get("/api/v1/programs")).json()
+    assert any(p["name"] == "BSCS" for p in progs)
+    sessions = (await admin_client.get("/api/v1/sessions")).json()
+    assert any(s["name"] == "2025-2026" for s in sessions)
+
+    # Detail must expose the resolved names (used to prefill the edit form).
+    detail = (await admin_client.get(f"/api/v1/students/{sid}")).json()
+    assert detail["program_name"] == "BSCS"
+    assert detail["class_name"] == "Year 1"
+    assert detail["section_name"] == "Blue"
+    assert detail["session_name"] == "2025-2026"
+
+
+async def test_student_create_freetext_reuses_existing_case_insensitive(admin_client):
+    """Repeated / case-variant free-text placement reuses the same rows (no duplicates)."""
+    payload = {
+        "admission_date": "2025-08-01", "program": "ICS", "class_name": "Part 1",
+        "section": "A", "academic_session": "2025-2026", "password": "Student!2025",
+    }
+    r1 = await admin_client.post("/api/v1/students", json={
+        "full_name": "Reuse One", "email": "reuse.1@test.edu", **payload})
+    assert r1.status_code == 200, r1.text
+    # Same names, different case and surrounding whitespace -> must reuse, not duplicate.
+    r2 = await admin_client.post("/api/v1/students", json={
+        "full_name": "Reuse Two", "email": "reuse.2@test.edu",
+        "admission_date": "2025-08-01", "program": " ics ", "class_name": " part 1 ",
+        "section": " a ", "academic_session": "2025-2026", "password": "Student!2025"})
+    assert r2.status_code == 200, r2.text
+
+    progs = (await admin_client.get("/api/v1/programs")).json()
+    ics = [p for p in progs if p["name"].lower() == "ics"]
+    assert len(ics) == 1
+    sessions = (await admin_client.get("/api/v1/sessions")).json()
+    assert len([s for s in sessions if s["name"] == "2025-2026"]) == 1
+
+    classes = (await admin_client.get("/api/v1/classes", params={"program_id": ics[0]["id"]})).json()
+    p1 = [c for c in classes if c["name"].lower() == "part 1"]
+    assert len(p1) == 1
+    sections = (await admin_client.get("/api/v1/sections", params={"class_level_id": p1[0]["id"]})).json()
+    assert len([s for s in sections if s["name"].lower() == "a"]) == 1
+
+
+async def test_student_update_freetext_placement(admin_client, academic_setup):
+    """Editing a student with free-text placement updates the resolved rows."""
+    student = await _create_student(admin_client, academic_setup, email="edit.s@test.edu")
+    # Change placement to a brand-new section in a new class/program/session.
+    resp = await admin_client.patch(f"/api/v1/students/{student['id']}", json={
+        "program": "FSc", "class_name": "Part 2", "section": "Green",
+        "academic_session": "2026-2027",
+    })
+    assert resp.status_code == 200, resp.text
+    detail = (await admin_client.get(f"/api/v1/students/{student['id']}")).json()
+    assert detail["program_name"] == "FSc"
+    assert detail["class_name"] == "Part 2"
+    assert detail["section_name"] == "Green"
+    assert detail["session_name"] == "2026-2027"

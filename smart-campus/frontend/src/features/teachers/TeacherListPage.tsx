@@ -21,8 +21,8 @@ export function TeacherListPage() {
   });
 
   const columns: Column<Teacher>[] = [
-    { key: "employee_id", header: "Employee ID", render: (t) => <span className="font-medium text-navy">{t.employee_id}</span> },
-    { key: "full_name", header: "Name", render: (t) => <span className="font-medium text-navy">{t.full_name}</span> },
+    { key: "employee_id", header: "Employee ID", render: (t) => <span className="font-medium text-ink">{t.employee_id}</span> },
+    { key: "full_name", header: "Name", render: (t) => <span className="font-medium text-ink">{t.full_name}</span> },
     { key: "email", header: "Email" },
     { key: "department", header: "Department", render: (t) => t.department || "—" },
     { key: "designation", header: "Designation" },

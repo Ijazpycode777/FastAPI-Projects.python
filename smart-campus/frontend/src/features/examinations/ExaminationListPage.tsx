@@ -19,7 +19,7 @@ export function ExaminationListPage() {
   });
 
   const columns: Column<Examination>[] = [
-    { key: "name", header: "Name", render: (e) => <span className="font-medium text-navy">{e.name}</span> },
+    { key: "name", header: "Name", render: (e) => <span className="font-medium text-ink">{e.name}</span> },
     { key: "exam_type", header: "Type", render: (e) => <Badge>{e.exam_type.replace("_", " ")}</Badge> },
     { key: "exam_date", header: "Date", render: (e) => formatDate(e.exam_date) },
     { key: "max_marks", header: "Max" },

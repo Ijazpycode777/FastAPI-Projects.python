@@ -38,5 +38,5 @@ export const TONE_TEXT: Record<string, string> = {
   success: "text-teal",
   warning: "text-amber",
   danger: "text-rose",
-  neutral: "text-navy",
+  neutral: "text-ink",
 };

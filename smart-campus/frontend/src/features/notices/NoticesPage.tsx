@@ -44,7 +44,7 @@ export function NoticesPage() {
                 <div className="flex items-start gap-3 min-w-0">
                   {n.is_pinned && <Pin size={16} className="text-amber mt-1 shrink-0" />}
                   <div className="min-w-0">
-                    <p className="font-semibold text-navy">{n.title}</p>
+                    <p className="font-semibold text-ink">{n.title}</p>
                     <p className="text-xs text-slate-muted mt-0.5">{formatDateTime(n.published_at)} · <span className="capitalize">{n.target_audience}</span></p>
                   </div>
                 </div>

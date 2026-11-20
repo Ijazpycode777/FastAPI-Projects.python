@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ForbiddenError, NotFoundError
 from app.database.session import get_db
+from app.models.academic import AcademicSession, ClassLevel, Program, Section
 from app.models.people import Student
 from app.models.user import User
 from app.schemas.common import Page, paginate
@@ -64,7 +65,17 @@ async def get_student(student_id: str, user: User = Depends(get_current_user), d
     student = await db.get(Student, student_id)
     if student is None:
         raise NotFoundError("Student not found.")
-    return StudentDetailOut.model_validate(student)
+    out = StudentDetailOut.model_validate(student)
+    # Resolve the placement names so the edit form can prefill them as free text.
+    if student.current_program_id and (p := await db.get(Program, student.current_program_id)):
+        out.program_name = p.name
+    if student.current_class_id and (c := await db.get(ClassLevel, student.current_class_id)):
+        out.class_name = c.name
+    if student.current_section_id and (s := await db.get(Section, student.current_section_id)):
+        out.section_name = s.name
+    if student.current_session_id and (sess := await db.get(AcademicSession, student.current_session_id)):
+        out.session_name = sess.name
+    return out
 
 
 @router.patch("/{student_id}", response_model=StudentOut, dependencies=[Depends(require_admin())])

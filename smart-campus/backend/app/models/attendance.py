@@ -116,15 +116,32 @@ class Holiday(UUIDPK, TimestampMixin, Base):
 
 
 class LeaveRecord(UUIDPK, TimestampMixin, Base):
-    """Teacher leave records."""
+    """Leave records for students AND teachers.
+
+    Exactly one of ``student_id`` / ``teacher_id`` is set, matching
+    ``person_type``. Leave is a distinct record — never a fake attendance row.
+    Admin-submitted leave is stored as ``status='approved'`` with
+    ``approved_by`` recording the submitting administrator.
+    """
     __tablename__ = "leave_records"
     __table_args__ = (
         CheckConstraint("status IN ('pending','approved','rejected')", name="leave_status_check"),
+        CheckConstraint("person_type IN ('student','teacher')", name="leave_person_type_check"),
+        CheckConstraint(
+            "(person_type='student' AND student_id IS NOT NULL AND teacher_id IS NULL) "
+            "OR (person_type='teacher' AND teacher_id IS NOT NULL AND student_id IS NULL)",
+            name="leave_person_target_check",
+        ),
         Index("ix_leave_teacher", "teacher_id", "status"),
+        Index("ix_leave_student", "student_id", "status"),
     )
 
-    teacher_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("teachers.id", ondelete="CASCADE"), nullable=False
+    person_type: Mapped[str] = mapped_column(String(8), nullable=False, default="teacher")
+    student_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("students.id", ondelete="CASCADE"), nullable=True
+    )
+    teacher_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("teachers.id", ondelete="CASCADE"), nullable=True
     )
     start_date: Mapped[date] = mapped_column(Date, nullable=False)
     end_date: Mapped[date] = mapped_column(Date, nullable=False)

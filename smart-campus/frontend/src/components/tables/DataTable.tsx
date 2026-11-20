@@ -51,7 +51,7 @@ export function DataTable<T>({
               {columns.map((col) => (
                 <th
                   key={col.key}
-                  className={cn("px-4 py-3 text-left font-semibold text-navy whitespace-nowrap", col.className)}
+                  className={cn("px-4 py-3 text-left font-semibold text-ink whitespace-nowrap", col.className)}
                 >
                   {col.sortable && onSort ? (
                     <button onClick={() => onSort(col.key)} className="inline-flex items-center gap-1 hover:text-indigo">
@@ -73,7 +73,7 @@ export function DataTable<T>({
                 className={cn("border-b border-slate-border last:border-0 transition-colors", onRowClick && "cursor-pointer hover:bg-slate-bg/60")}
               >
                 {columns.map((col) => (
-                  <td key={col.key} className={cn("px-4 py-3 text-navy align-middle", col.className)}>
+                  <td key={col.key} className={cn("px-4 py-3 text-ink align-middle", col.className)}>
                     {col.render ? col.render(row) : String((row as Record<string, unknown>)[col.key] ?? "—")}
                   </td>
                 ))}

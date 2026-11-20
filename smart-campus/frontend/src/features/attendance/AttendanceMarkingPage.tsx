@@ -83,16 +83,16 @@ export function AttendanceMarkingPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead><tr className="border-b border-slate-border bg-slate-bg/60">
-                <th className="px-4 py-2.5 text-left font-semibold text-navy">Roll</th>
-                <th className="px-4 py-2.5 text-left font-semibold text-navy">Name</th>
-                <th className="px-4 py-2.5 text-left font-semibold text-navy">Admission No.</th>
-                <th className="px-4 py-2.5 text-left font-semibold text-navy">Status</th>
+                <th className="px-4 py-2.5 text-left font-semibold text-ink">Roll</th>
+                <th className="px-4 py-2.5 text-left font-semibold text-ink">Name</th>
+                <th className="px-4 py-2.5 text-left font-semibold text-ink">Admission No.</th>
+                <th className="px-4 py-2.5 text-left font-semibold text-ink">Status</th>
               </tr></thead>
               <tbody>
                 {students.data?.map((s, i) => (
                   <tr key={s.id} className="border-b border-slate-border last:border-0">
                     <td className="px-4 py-2.5 text-slate-muted">{i + 1}</td>
-                    <td className="px-4 py-2.5 font-medium text-navy">{s.full_name}</td>
+                    <td className="px-4 py-2.5 font-medium text-ink">{s.full_name}</td>
                     <td className="px-4 py-2.5 text-slate-muted">{s.admission_number}</td>
                     <td className="px-4 py-2.5">
                       <div className="flex gap-1.5">

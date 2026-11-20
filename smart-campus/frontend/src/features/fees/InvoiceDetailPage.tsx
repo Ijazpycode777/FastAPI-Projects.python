@@ -45,7 +45,7 @@ export function InvoiceDetailPage() {
       <div>
         <PageHeader title="My Fees" description="Your fee statement and payment history." />
         <div className="grid grid-cols-3 gap-4 mb-4">
-          <Card className="p-5"><p className="text-xs text-slate-muted">Invoiced</p><p className="text-2xl font-bold text-navy mt-1">{formatCurrency(s.total_invoiced)}</p></Card>
+          <Card className="p-5"><p className="text-xs text-slate-muted">Invoiced</p><p className="text-2xl font-bold text-ink mt-1">{formatCurrency(s.total_invoiced)}</p></Card>
           <Card className="p-5"><p className="text-xs text-slate-muted">Paid</p><p className="text-2xl font-bold text-teal mt-1">{formatCurrency(s.total_paid)}</p></Card>
           <Card className="p-5"><p className="text-xs text-slate-muted">Outstanding</p><p className="text-2xl font-bold text-rose mt-1">{formatCurrency(s.total_outstanding)}</p></Card>
         </div>
@@ -54,9 +54,9 @@ export function InvoiceDetailPage() {
           <div className="divide-y divide-slate-border">
             {s.items.map(({ invoice: inv }) => (
               <div key={inv.id} className="px-5 py-3 flex items-center justify-between">
-                <div><p className="text-sm font-medium text-navy">{inv.invoice_number}</p><p className="text-xs text-slate-muted">Due {formatDate(inv.due_date)}</p></div>
+                <div><p className="text-sm font-medium text-ink">{inv.invoice_number}</p><p className="text-xs text-slate-muted">Due {formatDate(inv.due_date)}</p></div>
                 <div className="flex items-center gap-3">
-                  <span className="text-sm font-semibold text-navy">{formatCurrency(inv.amount)}</span>
+                  <span className="text-sm font-semibold text-ink">{formatCurrency(inv.amount)}</span>
                   <Badge status={inv.status}>{inv.status}</Badge>
                 </div>
               </div>
@@ -80,7 +80,7 @@ export function InvoiceDetailPage() {
         <Card className="lg:col-span-2">
           <CardHeader title="Invoice" action={<Badge status={inv.status}>{inv.status}</Badge>} />
           <div className="p-5 grid grid-cols-3 gap-4 text-center">
-            <div><p className="text-xs text-slate-muted">Amount</p><p className="text-xl font-bold text-navy mt-1">{formatCurrency(inv.amount)}</p></div>
+            <div><p className="text-xs text-slate-muted">Amount</p><p className="text-xl font-bold text-ink mt-1">{formatCurrency(inv.amount)}</p></div>
             <div><p className="text-xs text-slate-muted">Paid</p><p className="text-xl font-bold text-teal mt-1">{formatCurrency(inv.paid_amount)}</p></div>
             <div><p className="text-xs text-slate-muted">Outstanding</p><p className="text-xl font-bold text-rose mt-1">{formatCurrency(inv.outstanding)}</p></div>
           </div>
@@ -107,8 +107,8 @@ export function InvoiceDetailPage() {
         {inv.payments.length ? (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead><tr className="border-b border-slate-border bg-slate-bg/60"><th className="px-4 py-2.5 text-left font-semibold text-navy">Receipt</th><th className="px-4 py-2.5 text-left font-semibold text-navy">Date</th><th className="px-4 py-2.5 text-left font-semibold text-navy">Method</th><th className="px-4 py-2.5 text-left font-semibold text-navy">Reference</th><th className="px-4 py-2.5 text-left font-semibold text-navy">Amount</th></tr></thead>
-              <tbody>{inv.payments.map((p) => (<tr key={p.id} className="border-b border-slate-border last:border-0"><td className="px-4 py-2.5 font-medium text-navy">{p.receipt_number}</td><td className="px-4 py-2.5">{formatDate(p.paid_at)}</td><td className="px-4 py-2.5 capitalize">{p.method}</td><td className="px-4 py-2.5">{p.reference || "—"}</td><td className="px-4 py-2.5 font-semibold text-teal">{formatCurrency(p.amount)}</td></tr>))}</tbody>
+              <thead><tr className="border-b border-slate-border bg-slate-bg/60"><th className="px-4 py-2.5 text-left font-semibold text-ink">Receipt</th><th className="px-4 py-2.5 text-left font-semibold text-ink">Date</th><th className="px-4 py-2.5 text-left font-semibold text-ink">Method</th><th className="px-4 py-2.5 text-left font-semibold text-ink">Reference</th><th className="px-4 py-2.5 text-left font-semibold text-ink">Amount</th></tr></thead>
+              <tbody>{inv.payments.map((p) => (<tr key={p.id} className="border-b border-slate-border last:border-0"><td className="px-4 py-2.5 font-medium text-ink">{p.receipt_number}</td><td className="px-4 py-2.5">{formatDate(p.paid_at)}</td><td className="px-4 py-2.5 capitalize">{p.method}</td><td className="px-4 py-2.5">{p.reference || "—"}</td><td className="px-4 py-2.5 font-semibold text-teal">{formatCurrency(p.amount)}</td></tr>))}</tbody>
             </table>
           </div>
         ) : <EmptyState icon={Wallet} title="No payments yet" />}

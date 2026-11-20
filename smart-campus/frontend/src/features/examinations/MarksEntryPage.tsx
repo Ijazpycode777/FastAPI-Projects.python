@@ -68,13 +68,13 @@ export function MarksEntryPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead><tr className="border-b border-slate-border bg-slate-bg/60">
-                <th className="px-4 py-2.5 text-left font-semibold text-navy">#</th>
-                <th className="px-4 py-2.5 text-left font-semibold text-navy">Student</th>
-                <th className="px-4 py-2.5 text-left font-semibold text-navy">Marks / {e.max_marks}</th>
-                <th className="px-4 py-2.5 text-left font-semibold text-navy">Absent</th>
-                <th className="px-4 py-2.5 text-left font-semibold text-navy">%</th>
-                <th className="px-4 py-2.5 text-left font-semibold text-navy">Grade</th>
-                <th className="px-4 py-2.5 text-left font-semibold text-navy">Pass</th>
+                <th className="px-4 py-2.5 text-left font-semibold text-ink">#</th>
+                <th className="px-4 py-2.5 text-left font-semibold text-ink">Student</th>
+                <th className="px-4 py-2.5 text-left font-semibold text-ink">Marks / {e.max_marks}</th>
+                <th className="px-4 py-2.5 text-left font-semibold text-ink">Absent</th>
+                <th className="px-4 py-2.5 text-left font-semibold text-ink">%</th>
+                <th className="px-4 py-2.5 text-left font-semibold text-ink">Grade</th>
+                <th className="px-4 py-2.5 text-left font-semibold text-ink">Pass</th>
               </tr></thead>
               <tbody>
                 {students.data?.map((s, i) => {
@@ -83,7 +83,7 @@ export function MarksEntryPage() {
                   return (
                     <tr key={s.id} className="border-b border-slate-border last:border-0">
                       <td className="px-4 py-2.5 text-slate-muted">{i + 1}</td>
-                      <td className="px-4 py-2.5 font-medium text-navy">{s.full_name}</td>
+                      <td className="px-4 py-2.5 font-medium text-ink">{s.full_name}</td>
                       <td className="px-4 py-2.5">
                         <input type="number" min={0} max={e.max_marks} disabled={isFinalized}
                           className="input !w-24" defaultValue={em?.marks_obtained ?? ""}

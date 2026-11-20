@@ -1,15 +1,29 @@
 /** @type {import('tailwindcss').Config} */
+// Spec palette (Part 11.2). Tokens are repointed in place so existing utility
+// classes (bg-navy, text-indigo, bg-teal, …) propagate the new colours everywhere.
 export default {
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
   theme: {
     extend: {
       colors: {
-        navy: { DEFAULT: "#172554", soft: "#1e293b" },
-        indigo: { DEFAULT: "#4F46E5", soft: "#6366F1", dark: "#4338CA" },
-        teal: { DEFAULT: "#0D9488", soft: "#14B8A6" },
-        amber: { DEFAULT: "#F59E0B", soft: "#FBBF24" },
-        rose: { DEFAULT: "#E11D48", soft: "#F43F5E" },
-        slate: { bg: "#F1F5F9", card: "#FFFFFF", border: "#E2E8F0", muted: "#64748B" },
+        // Primary dark blue — sidebar, attendance "present", brand accents.
+        navy: { DEFAULT: "#163A70", soft: "#1F2937" },
+        // Primary blue — buttons, active nav, links, focus ring.
+        indigo: { DEFAULT: "#2457A6", soft: "#3B6FB5", dark: "#1F4A8A" },
+        // Success
+        teal: { DEFAULT: "#23865B", soft: "#2BA06E" },
+        // Warning
+        amber: { DEFAULT: "#D99A27", soft: "#E6B24A" },
+        // Error / danger
+        rose: { DEFAULT: "#D64545", soft: "#E06A6A" },
+        // Neutrals
+        slate: { bg: "#F5F7FA", card: "#FFFFFF", border: "#E4E7EC", muted: "#667085" },
+        // Main text (near-black)
+        ink: { DEFAULT: "#1F2937" },
+        // Light blue surface
+        lightblue: { DEFAULT: "#EAF1FA" },
+        // Neutral grey — leave / inactive (attendance "leave" segment)
+        neutral: { DEFAULT: "#9AA3AF" },
       },
       fontFamily: {
         sans: ["Inter", "ui-sans-serif", "system-ui", "Segoe UI", "Roboto", "Helvetica", "Arial"],

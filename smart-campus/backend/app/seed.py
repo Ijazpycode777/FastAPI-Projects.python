@@ -487,6 +487,33 @@ async def seed_demo_data() -> None:
                 paid_at=date(2025, 8, 5), method="bank_transfer", reference="BNK-001",
                 recorded_by=admin.id, receipt_number="RCP-000001",
             )
+            # Two more payments in later months so the admin fee-collection trend
+            # chart has a real multi-month series (not a single point).
+            await _get_or_create(
+                db, Payment, [Payment.receipt_number == "RCP-000002"],
+                invoice_id=inv.id, student_id=created_students[0].id, amount=10000,
+                paid_at=date(2025, 10, 10), method="card", reference="CARD-002",
+                recorded_by=admin.id, receipt_number="RCP-000002",
+            )
+            await _get_or_create(
+                db, Payment, [Payment.receipt_number == "RCP-000003"],
+                invoice_id=inv.id, student_id=created_students[0].id, amount=8000,
+                paid_at=date(2025, 12, 12), method="cash", reference="CSH-003",
+                recorded_by=admin.id, receipt_number="RCP-000003",
+            )
+
+            # Student leave for the first student covering the first Mon-Wed of
+            # the session (Aug 4-6 2025). The timetable has lectures on Mon/Tue/Wed,
+            # so this yields real "leave" sessions in the attendance donut.
+            from app.models.attendance import LeaveRecord as _LeaveRecord
+            await _get_or_create(
+                db, _LeaveRecord,
+                [_LeaveRecord.student_id == created_students[0].id,
+                 _LeaveRecord.start_date == date(2025, 8, 4)],
+                person_type="student", student_id=created_students[0].id, teacher_id=None,
+                start_date=date(2025, 8, 4), end_date=date(2025, 8, 6),
+                reason="Medical leave (fever)", status="approved", approved_by=admin.id,
+            )
 
             # Study material — write a real synthetic PDF so the download
             # endpoint never advertises a file that does not exist.

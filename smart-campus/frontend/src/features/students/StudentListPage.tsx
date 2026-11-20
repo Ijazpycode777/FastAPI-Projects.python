@@ -16,8 +16,8 @@ export function StudentListPage() {
   const { data, isLoading } = useStudents({ q: debounced || undefined, page, page_size: 20 });
 
   const columns: Column<Student>[] = [
-    { key: "admission_number", header: "Admission No.", sortable: true, render: (s) => <span className="font-medium text-navy">{s.admission_number}</span> },
-    { key: "full_name", header: "Name", render: (s) => <span className="font-medium text-navy">{s.full_name}</span> },
+    { key: "admission_number", header: "Admission No.", sortable: true, render: (s) => <span className="font-medium text-ink">{s.admission_number}</span> },
+    { key: "full_name", header: "Name", render: (s) => <span className="font-medium text-ink">{s.full_name}</span> },
     { key: "email", header: "Email" },
     { key: "admission_date", header: "Admitted", render: (s) => formatDate(s.admission_date) },
     { key: "account_status", header: "Status", render: (s) => <Badge status={s.account_status}>{s.account_status}</Badge> },

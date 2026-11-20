@@ -5,8 +5,8 @@ from datetime import date
 async def _student(admin_client, setup, email):
     resp = await admin_client.post("/api/v1/students", json={
         "full_name": "Stu Fee", "email": email, "admission_date": "2025-08-01",
-        "program_id": setup["program_id"], "class_id": setup["class_id"],
-        "section_id": setup["section_id"], "academic_session_id": setup["session_id"],
+        "program": setup["program_name"], "class_name": setup["class_name"],
+        "section": setup["section_name"], "academic_session": setup["session_name"],
         "password": "Student!2025",
     })
     return resp.json()

@@ -27,7 +27,7 @@ export function ReportsPage() {
           <Card key={r.label} className="p-5 flex items-start gap-4">
             <div className={`h-11 w-11 rounded-lg bg-slate-bg grid place-items-center ${r.tone}`}><r.icon size={20} /></div>
             <div className="min-w-0 flex-1">
-              <p className="font-semibold text-navy">{r.label}</p>
+              <p className="font-semibold text-ink">{r.label}</p>
               <p className="text-sm text-slate-muted mt-0.5">{r.description}</p>
             </div>
             <a href={r.href} target="_blank" rel="noreferrer" className="btn-secondary !py-1.5 shrink-0">Export</a>

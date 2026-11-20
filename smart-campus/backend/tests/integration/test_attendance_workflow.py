@@ -25,8 +25,8 @@ async def _setup_teacher(admin_client, setup, email="teacher.t1@test.edu"):
 async def _create_student(admin_client, setup, email):
     resp = await admin_client.post("/api/v1/students", json={
         "full_name": "Stu", "email": email, "admission_date": "2025-08-01",
-        "program_id": setup["program_id"], "class_id": setup["class_id"],
-        "section_id": setup["section_id"], "academic_session_id": setup["session_id"],
+        "program": setup["program_name"], "class_name": setup["class_name"],
+        "section": setup["section_name"], "academic_session": setup["session_name"],
         "password": "Student!2025",
     })
     assert resp.status_code == 200, resp.text

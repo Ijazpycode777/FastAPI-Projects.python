@@ -1,23 +1,34 @@
 """Dashboard aggregation. Every value comes from real DB queries — no hardcoding."""
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date
 from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ForbiddenError
-from app.models.academic import Program
-from app.models.attendance import AttendanceRecord
+from app.models.academic import ClassLevel, Program, Section, Subject
+from app.models.assignments import TeacherAssignment
 from app.models.communications import Notice
 from app.models.examinations import Examination, StudentMark
 from app.models.fees import FeeInvoice, Payment
-from app.models.people import Student, Teacher
+from app.models.people import Student, StudentEnrolment, Teacher
+from app.models.timetable import TimetableEntry
 from app.models.user import User
-from app.services.attendance_logic import attendance_percentage
-from app.services.fees_calc import total_outstanding, total_paid
-from app.services.fees_calc import InvoiceView
+from app.services.attendance_service import student_breakdown
+from app.services.fees_calc import InvoiceView, total_outstanding, total_paid
+
+_WEEKDAYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
+
+
+async def _names(db: AsyncSession, model, ids: set[str]) -> dict[str, str]:
+    """id -> name (or full_name for Teacher) lookup."""
+    if not ids:
+        return {}
+    rows = (await db.execute(select(model).where(model.id.in_(list(ids))))).scalars().all()
+    field = "full_name" if model is Teacher else "name"
+    return {str(r.id): getattr(r, field) for r in rows}
 
 
 async def admin_dashboard(db: AsyncSession) -> dict[str, Any]:
@@ -27,34 +38,40 @@ async def admin_dashboard(db: AsyncSession) -> dict[str, Any]:
     teachers = (await db.execute(
         select(func.count()).select_from(Teacher).where(Teacher.employment_status == "active")
     )).scalar_one()
+    active_classes = (await db.execute(
+        select(func.count(func.distinct(Student.current_class_id)))
+        .where(Student.account_status == "active", Student.current_class_id.is_not(None))
+    )).scalar_one()
+    total_sections = (await db.execute(select(func.count()).select_from(Section))).scalar_one()
 
-    # Program distribution
+    # Enrolment distribution by program (donut).
     rows = (await db.execute(
-        select(Student.current_program_id, func.count()).where(Student.account_status == "active").group_by(Student.current_program_id)
+        select(Student.current_program_id, func.count())
+        .where(Student.account_status == "active")
+        .group_by(Student.current_program_id)
     )).all()
-    programs = {str(p.id): p.code for p in (await db.execute(select(Program))).scalars().all()}
-    program_dist = [{"label": programs.get(pid, "—"), "value": cnt} for pid, cnt in rows if pid]
+    programs = await _names(db, Program, {pid for pid, _ in rows if pid})
+    program_dist = [{"label": programs.get(str(pid), "—"), "value": int(cnt)} for pid, cnt in rows if pid]
 
-    # Class/section distribution
+    # Class/section comparison (horizontal bar).
     cs_rows = (await db.execute(
         select(Student.current_class_id, Student.current_section_id, func.count())
         .where(Student.account_status == "active")
         .group_by(Student.current_class_id, Student.current_section_id)
     )).all()
-    class_section_dist = [{"label": f"{cid}/{sid}", "value": cnt} for cid, sid, cnt in cs_rows if cid]
+    cnames = await _names(db, ClassLevel, {cid for cid, _, _ in cs_rows if cid})
+    snames = await _names(db, Section, {sid for _, sid, _ in cs_rows if sid})
+    class_comparison: list[dict[str, Any]] = []
+    for cid, sid, cnt in cs_rows:
+        if not cid:
+            continue
+        label = cnames.get(str(cid), "—")
+        if sid:
+            label = f"{label} · {snames.get(str(sid), '—')}"
+        class_comparison.append({"label": label, "value": int(cnt)})
+    class_comparison.sort(key=lambda x: x["value"], reverse=True)
 
-    # Attendance trend (last 7 days)
-    since = date.today() - timedelta(days=7)
-    att_rows = (await db.execute(
-        select(AttendanceRecord.attendance_date, AttendanceRecord.status)
-        .where(AttendanceRecord.attendance_date >= since)
-    )).all()
-    by_day: dict[date, list[str]] = {}
-    for d, st in att_rows:
-        by_day.setdefault(d, []).append(st)
-    trend = [{"label": d.isoformat(), "value": attendance_percentage(sts)} for d, sts in sorted(by_day.items())]
-
-    # Examination performance by type
+    # Examination performance by type.
     exam_rows = (await db.execute(
         select(Examination.exam_type, func.avg(StudentMark.percentage))
         .join(StudentMark, StudentMark.examination_id == Examination.id)
@@ -63,14 +80,21 @@ async def admin_dashboard(db: AsyncSession) -> dict[str, Any]:
     )).all()
     exam_perf = [{"label": t, "value": round(float(v or 0), 2)} for t, v in exam_rows]
 
-    # Fees
+    # Fees: collected/outstanding + monthly collection trend.
     invoices = (await db.execute(select(FeeInvoice))).scalars().all()
-    inv_views = []
+    inv_views: list[InvoiceView] = []
     for inv in invoices:
         pays = (await db.execute(select(Payment.amount).where(Payment.invoice_id == inv.id))).scalars().all()
         inv_views.append(InvoiceView(str(inv.id), float(inv.amount), [float(p) for p in pays]))
     collected = total_paid(inv_views)
     outstanding = total_outstanding(inv_views)
+    pay_rows = (await db.execute(select(Payment.paid_at, Payment.amount))).all()
+    by_month: dict[str, float] = {}
+    for pd, amt in pay_rows:
+        if pd:
+            key = pd.strftime("%Y-%m")
+            by_month[key] = by_month.get(key, 0.0) + float(amt)
+    fee_trend = [{"label": k, "value": round(v, 2)} for k, v in sorted(by_month.items())]
 
     recent_notices = (await db.execute(
         select(Notice).order_by(Notice.published_at.desc()).limit(5)
@@ -78,20 +102,22 @@ async def admin_dashboard(db: AsyncSession) -> dict[str, Any]:
 
     return {
         "stats": [
-            {"label": "Active Students", "value": int(active_students), "tone": "primary"},
-            {"label": "Active Teachers", "value": int(teachers), "tone": "primary"},
-            {"label": "Total Collected", "value": collected, "tone": "success"},
-            {"label": "Outstanding", "value": outstanding, "tone": "danger"},
+            {"label": "Total Students", "value": int(active_students), "tone": "primary"},
+            {"label": "Total Teachers", "value": int(teachers), "tone": "primary"},
+            {"label": "Active Classes", "value": int(active_classes), "tone": "primary"},
+            {"label": "Total Sections", "value": int(total_sections), "tone": "primary"},
+            {"label": "Fee Collection", "value": round(float(collected), 2), "tone": "success"},
+            {"label": "Outstanding Fees", "value": round(float(outstanding), 2), "tone": "danger"},
         ],
         "program_distribution": program_dist,
-        "class_section_distribution": class_section_dist,
-        "attendance_trend": trend,
+        "class_comparison": class_comparison,
         "examination_performance": exam_perf,
+        "fee_collection_trend": fee_trend,
         "fee_collection": [
-            {"label": "Collected", "value": collected, "tone": "success"},
-            {"label": "Outstanding", "value": outstanding, "tone": "danger"},
+            {"label": "Collected", "value": round(float(collected), 2), "tone": "success"},
+            {"label": "Outstanding", "value": round(float(outstanding), 2), "tone": "danger"},
         ],
-        "outstanding_balance": outstanding,
+        "outstanding_balance": round(float(outstanding), 2),
         "recent_notices": [{"id": str(n.id), "title": n.title, "published_at": n.published_at.isoformat()} for n in recent_notices],
         "recent_activity": [],
     }
@@ -101,23 +127,53 @@ async def teacher_dashboard(db: AsyncSession, user: User) -> dict[str, Any]:
     teacher = user.teacher_profile
     if teacher is None:
         raise ForbiddenError("Teacher profile missing.")
-    from app.models.assignments import TeacherAssignment
-    from app.models.timetable import TimetableEntry
+    today = date.today()
+    today_name = _WEEKDAYS[today.weekday()]
 
     assignments = (await db.execute(
         select(TeacherAssignment).where(TeacherAssignment.teacher_id == teacher.id, TeacherAssignment.is_active.is_(True))
     )).scalars().all()
-    today = date.today()
-    today_name = ["monday","tuesday","wednesday","thursday","friday","saturday","sunday"][today.weekday()]
-    today_entries = (await db.execute(
-        select(TimetableEntry).where(TimetableEntry.teacher_id == teacher.id,
-                                     TimetableEntry.day_of_week == today_name,
-                                     TimetableEntry.is_cancelled.is_(False))
-        .order_by(TimetableEntry.start_time)
+    class_ids = {str(a.class_id) for a in assignments}
+    subject_ids = {str(a.subject_id) for a in assignments}
+
+    weekly = (await db.execute(
+        select(TimetableEntry).where(TimetableEntry.teacher_id == teacher.id, TimetableEntry.is_cancelled.is_(False))
+        .order_by(TimetableEntry.day_of_week, TimetableEntry.start_time)
     )).scalars().all()
+    w_subj = await _names(db, Subject, {str(e.subject_id) for e in weekly})
+    w_cls = await _names(db, ClassLevel, {str(e.class_id) for e in weekly})
+    w_sec = await _names(db, Section, {str(e.section_id) for e in weekly if e.section_id})
+    weekly_timetable = [{
+        "id": str(e.id), "day": e.day_of_week,
+        "start": e.start_time.isoformat(), "end": e.end_time.isoformat(),
+        "subject_name": w_subj.get(str(e.subject_id), "—"),
+        "class_name": w_cls.get(str(e.class_id), "—"),
+        "section_name": w_sec.get(str(e.section_id)) if e.section_id else None,
+    } for e in weekly]
+    today_entries = [e for e in weekly if e.day_of_week == today_name]
+
+    # Class distribution: students per assigned class.
+    cls_students = (await db.execute(
+        select(Student.current_class_id, func.count())
+        .where(Student.account_status == "active",
+               Student.current_class_id.in_(list(class_ids) or ["__none__"]))
+        .group_by(Student.current_class_id)
+    )).all()
+    cnames = await _names(db, ClassLevel, class_ids)
+    class_distribution = [{"label": cnames.get(str(cid), "—"), "value": int(cnt)} for cid, cnt in cls_students]
+
+    # Student performance: average mark % per assigned subject.
+    perf_rows = (await db.execute(
+        select(StudentMark.subject_id, func.avg(StudentMark.percentage))
+        .where(StudentMark.subject_id.in_(list(subject_ids) or ["__none__"]), StudentMark.is_absent.is_(False))
+        .group_by(StudentMark.subject_id)
+    )).all()
+    snames = await _names(db, Subject, subject_ids)
+    student_performance = [{"label": snames.get(str(sid), "—"), "value": round(float(v or 0), 2)} for sid, v in perf_rows]
+
     upcoming = (await db.execute(
         select(Examination).where(Examination.exam_date >= today,
-                                  Examination.subject_id.in_([a.subject_id for a in assignments] or ["__none__"]))
+                                  Examination.subject_id.in_(list(subject_ids) or ["__none__"]))
         .order_by(Examination.exam_date).limit(5)
     )).scalars().all()
     notices = (await db.execute(
@@ -125,21 +181,24 @@ async def teacher_dashboard(db: AsyncSession, user: User) -> dict[str, Any]:
         .order_by(Notice.published_at.desc()).limit(5)
     )).scalars().all()
 
+    students_across = int(sum(r[1] for r in cls_students))
+
     return {
         "stats": [
-            {"label": "Assigned Classes", "value": len({str(a.class_id) for a in assignments}), "tone": "primary"},
-            {"label": "Assigned Subjects", "value": len({str(a.subject_id) for a in assignments}), "tone": "primary"},
+            {"label": "Assigned Classes", "value": len(class_ids), "tone": "primary"},
             {"label": "Today's Lectures", "value": len(today_entries), "tone": "primary"},
-            {"label": "Upcoming Exams", "value": len(upcoming), "tone": "warning"},
+            {"label": "Total Weekly Lectures", "value": len(weekly), "tone": "primary"},
+            {"label": "Students in Classes", "value": students_across, "tone": "primary"},
         ],
         "assigned_classes": [{"class_id": str(a.class_id), "section_id": str(a.section_id) if a.section_id else None, "subject_id": str(a.subject_id)} for a in assignments],
-        "assigned_subjects": list({str(a.subject_id) for a in assignments}),
+        "assigned_subjects": list(subject_ids),
         "today_timetable": [{"id": str(e.id), "start": e.start_time.isoformat(), "end": e.end_time.isoformat(), "class_id": str(e.class_id)} for e in today_entries],
-        "attendance_summary": {},
+        "weekly_timetable": weekly_timetable,
+        "class_distribution": class_distribution,
         "upcoming_examinations": [{"id": str(e.id), "name": e.name, "date": e.exam_date.isoformat()} for e in upcoming],
-        "student_performance": [],
+        "student_performance": student_performance,
         "recent_notices": [{"id": str(n.id), "title": n.title} for n in notices],
-        "workload": {"weekly_lectures": len(assignments)},
+        "workload": {"weekly_lectures": len(weekly)},
     }
 
 
@@ -147,24 +206,58 @@ async def student_dashboard(db: AsyncSession, user: User) -> dict[str, Any]:
     student = user.student_profile
     if student is None:
         raise ForbiddenError("Student profile missing.")
-    from app.services.attendance_service import student_percentage
     from app.services.fee_service import student_statement
+    from app.services.material_service import list_for_student
+    from app.services.notice_service import list_for_user
 
-    att = await student_percentage(db, str(student.id))
+    att = await student_breakdown(db, str(student.id))
     marks = (await db.execute(select(StudentMark).where(StudentMark.student_id == student.id))).scalars().all()
-    materials = await __import__("app.services.material_service", fromlist=["list_for_student"]).list_for_student(db, student)
-    notices = (await __import__("app.services.notice_service", fromlist=["list_for_user"]).list_for_user(db, user))
+    subj_names = await _names(db, Subject, {str(m.subject_id) for m in marks})
+    materials = await list_for_student(db, student)
+    notices = await list_for_user(db, user)
     statement = await student_statement(db, str(student.id))
+
+    # Today's lectures for the student's class/section.
+    enrol_res = await db.execute(
+        select(StudentEnrolment).where(StudentEnrolment.student_id == student.id, StudentEnrolment.is_active.is_(True))
+    )
+    enrol = enrol_res.scalar_one_or_none()
+    class_id = enrol.class_id if enrol else student.current_class_id
+    section_id = enrol.section_id if enrol else student.current_section_id
+    sess_id = enrol.academic_session_id if enrol else student.current_session_id
+    today_name = _WEEKDAYS[date.today().weekday()]
+    lecture_overview: list[dict[str, Any]] = []
+    if class_id and sess_id:
+        ents = (await db.execute(
+            select(TimetableEntry).where(
+                TimetableEntry.class_id == class_id,
+                TimetableEntry.academic_session_id == sess_id,
+                TimetableEntry.day_of_week == today_name,
+                TimetableEntry.is_cancelled.is_(False),
+            ).order_by(TimetableEntry.start_time)
+        )).scalars().all()
+        if section_id:
+            ents = [e for e in ents if e.section_id is None or str(e.section_id) == str(section_id)]
+        l_subj = await _names(db, Subject, {str(e.subject_id) for e in ents})
+        l_tch = await _names(db, Teacher, {str(e.teacher_id) for e in ents})
+        lecture_overview = [{
+            "id": str(e.id),
+            "start": e.start_time.isoformat(), "end": e.end_time.isoformat(),
+            "subject_name": l_subj.get(str(e.subject_id), "—"),
+            "teacher_name": l_tch.get(str(e.teacher_id), "—"),
+        } for e in ents]
 
     return {
         "stats": [
             {"label": "Attendance", "value": att["percentage"], "hint": "%", "tone": "success" if att["percentage"] >= 75 else "warning"},
             {"label": "Exams Taken", "value": len(marks), "tone": "primary"},
-            {"label": "Outstanding Fees", "value": statement["total_outstanding"], "tone": "danger" if statement["total_outstanding"] > 0 else "success"},
+            {"label": "Outstanding Fees", "value": round(float(statement["total_outstanding"]), 2), "tone": "danger" if statement["total_outstanding"] > 0 else "success"},
             {"label": "Materials", "value": len(materials), "tone": "primary"},
         ],
         "attendance_percentage": att["percentage"],
-        "subject_marks": [{"subject_id": str(m.subject_id), "percentage": float(m.percentage or 0), "grade": m.grade} for m in marks],
+        "attendance_breakdown": att,
+        "subject_marks": [{"subject_id": str(m.subject_id), "subject_name": subj_names.get(str(m.subject_id), "—"), "percentage": float(m.percentage or 0), "grade": m.grade} for m in marks],
+        "lecture_overview": lecture_overview,
         "recent_examinations": [],
         "recent_materials": [{"id": str(m.id), "title": m.title} for m in materials[:5]],
         "notices": [{"id": str(n.id), "title": n.title} for n in notices[:5]],

@@ -80,10 +80,10 @@ export function LoginPage() {
         <div className="w-full max-w-sm">
           <div className="lg:hidden flex items-center gap-2.5 mb-8">
             <div className="h-10 w-10 rounded-xl bg-indigo grid place-items-center text-white"><GraduationCap size={20} /></div>
-            <p className="font-bold text-navy text-lg">Smart Campus</p>
+            <p className="font-bold text-ink text-lg">Smart Campus</p>
           </div>
 
-          <h2 className="text-2xl font-bold text-navy">Sign in</h2>
+          <h2 className="text-2xl font-bold text-ink">Sign in</h2>
           <p className="text-sm text-slate-muted mt-1">Enter your credentials to access your dashboard.</p>
 
           {serverError && (
@@ -100,7 +100,7 @@ export function LoginPage() {
             <Field label="Password" required error={errors.password?.message}>
               <div className="relative">
                 <TextInput type={showPassword ? "text" : "password"} autoComplete="current-password" placeholder="••••••••" {...register("password")} />
-                <button type="button" onClick={() => setShowPassword((s) => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-muted hover:text-navy">
+                <button type="button" onClick={() => setShowPassword((s) => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-muted hover:text-ink">
                   {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
               </div>
@@ -111,11 +111,11 @@ export function LoginPage() {
           </form>
 
           <div className="mt-8 rounded-lg border border-slate-border bg-white p-4">
-            <p className="text-xs font-semibold text-navy mb-2">Demo accounts</p>
+            <p className="text-xs font-semibold text-ink mb-2">Demo accounts</p>
             <ul className="text-xs text-slate-muted space-y-1">
-              <li><span className="text-navy font-medium">Admin</span> · admin@smartcampus.edu / ChangeMe!2025</li>
-              <li><span className="text-navy font-medium">Teacher</span> · teacher.sarah@smartcampus.edu / Teacher!2025</li>
-              <li><span className="text-navy font-medium">Student</span> · student.ali@smartcampus.edu / Student!2025</li>
+              <li><span className="text-ink font-medium">Admin</span> · admin@smartcampus.edu / ChangeMe!2025</li>
+              <li><span className="text-ink font-medium">Teacher</span> · teacher.sarah@smartcampus.edu / Teacher!2025</li>
+              <li><span className="text-ink font-medium">Student</span> · student.ali@smartcampus.edu / Student!2025</li>
             </ul>
           </div>
         </div>

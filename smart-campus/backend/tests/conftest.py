@@ -138,6 +138,12 @@ async def academic_setup(admin_client):
         "section_id": sec.json()["id"],
         "subject_id": subj.json()["id"],
         "classroom_id": room.json()["id"],
+        # Free-text placement names (match what was created above so the
+        # student create endpoint's find-or-create resolves to the same rows).
+        "program_name": "ICS",
+        "class_name": "Part 1",
+        "section_name": "A",
+        "session_name": "2025-2026",
     }
 
 

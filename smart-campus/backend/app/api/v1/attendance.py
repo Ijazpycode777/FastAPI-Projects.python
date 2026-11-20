@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import ForbiddenError, NotFoundError
 from app.database.session import get_db
 from app.models.attendance import AttendanceRecord
 from app.models.user import User
@@ -25,7 +25,6 @@ router = APIRouter(prefix="/attendance", tags=["attendance"])
 @router.post("/mark", response_model=list[AttendanceOut], dependencies=[Depends(require_staff())])
 async def mark(payload: AttendanceBulkIn, user: User = Depends(require_staff()), db: AsyncSession = Depends(get_db)):
     if user.role != "teacher":
-        from app.core.exceptions import ForbiddenError
         raise ForbiddenError("Only teachers can mark attendance.")
     records = await attendance_service.mark_bulk(db, user, str(user.teacher_profile.id), payload.model_dump())
     return [AttendanceOut.model_validate(r) for r in records]
@@ -38,7 +37,6 @@ async def update_record(record_id: str, payload: AttendanceUpdateIn, user: User 
         raise NotFoundError("Attendance record not found.")
     admin = user.role == "admin"
     if not admin and str(record.teacher_id) != str(user.teacher_profile.id):
-        from app.core.exceptions import ForbiddenError
         raise ForbiddenError("You can only update your own attendance records.")
     record = await attendance_service.update_one(db, user, record, payload.status, payload.note, admin)
     return AttendanceOut.model_validate(record)
@@ -47,9 +45,21 @@ async def update_record(record_id: str, payload: AttendanceUpdateIn, user: User 
 @router.get("/student/{student_id}")
 async def student_attendance(student_id: str, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     if user.role == "student" and str(user.student_profile.id) != str(student_id):
-        from app.core.exceptions import ForbiddenError
         raise ForbiddenError("You can only view your own attendance.")
     return await attendance_service.student_percentage(db, student_id)
+
+
+@router.get("/student/{student_id}/breakdown")
+async def student_breakdown(student_id: str, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Present/Absent/Leave donut data for a student (admin or self)."""
+    if user.role == "student" and str(user.student_profile.id) != str(student_id):
+        raise ForbiddenError("You can only view your own attendance.")
+    return await attendance_service.student_breakdown(db, student_id)
+
+
+@router.get("/me/breakdown", dependencies=[Depends(require_student())])
+async def my_breakdown(user: User = Depends(require_student()), db: AsyncSession = Depends(get_db)):
+    return await attendance_service.student_breakdown(db, str(user.student_profile.id))
 
 
 @router.get("/class/{class_id}")

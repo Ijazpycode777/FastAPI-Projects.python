@@ -53,7 +53,7 @@ export function MaterialsPage() {
               <div className="flex items-start gap-3">
                 <div className="h-10 w-10 rounded-lg bg-indigo/10 text-indigo grid place-items-center"><BookOpen size={18} /></div>
                 <div className="min-w-0 flex-1">
-                  <p className="font-semibold text-navy truncate">{m.title}</p>
+                  <p className="font-semibold text-ink truncate">{m.title}</p>
                   <p className="text-xs text-slate-muted mt-0.5">{m.file_name} · {humanSize(m.file_size)}</p>
                 </div>
               </div>

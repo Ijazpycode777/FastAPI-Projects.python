@@ -21,6 +21,17 @@ export function formatDate(iso: string | null | undefined): string {
   return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
 
+/** DD-MM-YYYY — used for inclusive leave date ranges (spec Part 4.4). */
+export function formatDateDMY(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const yyyy = d.getFullYear();
+  return `${dd}-${mm}-${yyyy}`;
+}
+
 export function formatDateTime(iso: string | null | undefined): string {
   if (!iso) return "—";
   const d = new Date(iso);

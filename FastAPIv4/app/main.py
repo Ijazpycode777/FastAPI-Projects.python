@@ -50,9 +50,14 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
 
 @app.post("/urls/check")
 async def check_url(data: URLCheckRequest, current_user: User = Depends(get_current_user)):
-    async with httpx.AsyncClient() as client:
-        try:
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.get(str(data.url))
-            return {"url": data.url, "status_code": response.status_code, "checked_by": current_user.username }
-        except httpx.RequestError as e:
-            raise HTTPException(status_code=400, detail=f"Error checking URL: {str(e)}")
+            async with SessionLocal() as session:
+                new_url = URL(url=str(data.url), status_code=response.status_code, user_id=current_user.id)
+                session.add(new_url)
+                await session.commit()                        
+                await session.refresh(new_url)
+                return {"url": data.url, "status_code": response.status_code, "checked_by": current_user.username, "record_id": new_url.id}
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=400, detail=f"Error checking URL: {str(e)}")

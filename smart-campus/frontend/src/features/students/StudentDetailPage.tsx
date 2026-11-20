@@ -1,32 +1,32 @@
+import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, UserCog, Power, KeyRound } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { ArrowLeft, UserCog, Power, KeyRound, CalendarOff } from "lucide-react";
 import { PageHeader, Card, CardHeader, Badge, ErrorState, Skeleton, EmptyState } from "@/components/common";
+import { AttendanceDonut } from "@/components/charts";
+import { LeaveFormModal, LeaveHistory } from "@/features/leave";
 import { http } from "@/lib/api";
 import { useStudent } from "./queries";
 import { useToast } from "@/hooks/useToast";
 import { formatDate } from "@/lib/utils";
-import type { BoardRecord, AttendanceSummary, Enrolment } from "@/types";
+import type { BoardRecord, AttendanceBreakdown } from "@/types";
 
 export function StudentDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
+  const queryClient = useQueryClient();
   const { data: student, isLoading, isError, refetch } = useStudent(id);
+  const [leaveOpen, setLeaveOpen] = useState(false);
 
+  const breakdown = useQuery({
+    queryKey: ["student", id, "breakdown"],
+    queryFn: () => http.get<AttendanceBreakdown>(`/attendance/student/${id}/breakdown`),
+    enabled: !!id,
+  });
   const board = useQuery({
     queryKey: ["student", id, "board"],
     queryFn: () => http.get<BoardRecord[]>(`/students/${id}/board-records`),
-    enabled: !!id,
-  });
-  const attendance = useQuery({
-    queryKey: ["student", id, "attendance"],
-    queryFn: () => http.get<AttendanceSummary>(`/students/${id}/attendance`),  // falls back to /me path; see below
-    enabled: !!id,
-  });
-  const enrolments = useQuery({
-    queryKey: ["student", id, "enrolments"],
-    queryFn: () => http.get<Enrolment[]>(`/students/${id}/enrolments`).catch(() => []),
     enabled: !!id,
   });
 
@@ -43,22 +43,25 @@ export function StudentDetailPage() {
     const res = await http.post<{ temporary_password: string }>(`/auth/reset/${student.user_id}`);
     toast.success("Password reset", `Temporary password: ${res.temporary_password}`);
   };
+  const onLeaveSaved = () => {
+    queryClient.invalidateQueries({ queryKey: ["leave", "student", student.id] });
+    queryClient.invalidateQueries({ queryKey: ["student", student.id, "breakdown"] });
+  };
 
   return (
     <div>
       <PageHeader
         title={student.full_name}
         description={`${student.admission_number} · ${student.email}`}
-        action={
-          <>
-            <button onClick={() => navigate(-1)} className="btn-secondary"><ArrowLeft size={16} /> Back</button>
-            <button onClick={() => navigate(`/students/${student.id}/edit`)} className="btn-secondary"><UserCog size={16} /> Edit</button>
-            <button onClick={resetPassword} className="btn-secondary"><KeyRound size={16} /> Reset password</button>
-            <button onClick={toggleActive} className={student.account_status === "active" ? "btn-danger" : "btn-primary"}>
-              <Power size={16} /> {student.account_status === "active" ? "Deactivate" : "Activate"}
-            </button>
-          </>
-        }
+        action={<>
+          <button onClick={() => navigate(-1)} className="btn-secondary"><ArrowLeft size={16} /> Back</button>
+          <button onClick={() => navigate(`/students/${student.id}/edit`)} className="btn-secondary"><UserCog size={16} /> Edit</button>
+          <button onClick={() => setLeaveOpen(true)} className="btn-secondary"><CalendarOff size={16} /> Submit leave</button>
+          <button onClick={resetPassword} className="btn-secondary"><KeyRound size={16} /> Reset password</button>
+          <button onClick={toggleActive} className={student.account_status === "active" ? "btn-danger" : "btn-primary"}>
+            <Power size={16} /> {student.account_status === "active" ? "Deactivate" : "Activate"}
+          </button>
+        </>}
       />
 
       <div className="grid lg:grid-cols-3 gap-4">
@@ -72,6 +75,10 @@ export function StudentDetailPage() {
             <Row label="Gender" value={student.gender || "—"} />
             <Row label="Admitted" value={formatDate(student.admission_date)} />
             <Row label="Roll No." value={student.current_roll_number ? String(student.current_roll_number) : "—"} />
+            <Row label="Program" value={student.program_name || "—"} />
+            <Row label="Class / Part" value={student.class_name || "—"} />
+            <Row label="Section" value={student.section_name || "—"} />
+            <Row label="Session" value={student.session_name || "—"} />
             <div className="flex items-center justify-between">
               <dt className="text-slate-muted">Status</dt>
               <dd><Badge status={student.account_status}>{student.account_status}</Badge></dd>
@@ -81,25 +88,22 @@ export function StudentDetailPage() {
 
         <div className="lg:col-span-2 space-y-4">
           <Card>
-            <CardHeader title="Attendance summary" />
-            {attendance.data ? (
-              <div className="grid grid-cols-4 gap-3 p-5 text-center">
-                <Stat label="Present" value={attendance.data.present} />
-                <Stat label="Late" value={attendance.data.late} />
-                <Stat label="Absent" value={attendance.data.absent} />
-                <Stat label="Excused" value={attendance.data.excused} />
-                <div className="col-span-4 mt-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-slate-muted">Overall attendance</span>
-                    <span className={`font-bold ${attendance.data.percentage >= 75 ? "text-teal" : "text-amber"}`}>{attendance.data.percentage}%</span>
-                  </div>
-                  <div className="mt-1.5 h-2 w-full rounded-full bg-slate-bg overflow-hidden">
-                    <div className={`h-full rounded-full ${attendance.data.percentage >= 75 ? "bg-teal" : "bg-amber"}`} style={{ width: `${attendance.data.percentage}%` }} />
-                  </div>
-                </div>
-              </div>
-            ) : <EmptyState title="No attendance recorded" />}
+            <CardHeader title="Attendance" subtitle="Present · Absent · Leave" />
+            <div className="p-5 flex justify-center">
+              {breakdown.isLoading
+                ? <Skeleton className="h-60 w-60 rounded-full" />
+                : breakdown.data
+                  ? <AttendanceDonut
+                      present={breakdown.data.present} absent={breakdown.data.absent} leave={breakdown.data.leave}
+                      percentage={breakdown.data.percentage} size={260}
+                      onSegmentClick={() => navigate("/attendance")}
+                      onCentreClick={() => navigate("/attendance")}
+                    />
+                  : <EmptyState icon={CalendarOff} title="No attendance records yet" />}
+            </div>
           </Card>
+
+          <LeaveHistory personType="student" personId={student.id} />
 
           <Card>
             <CardHeader title="Previous academic records" subtitle="Matriculation & Intermediate Part 1" />
@@ -122,15 +126,18 @@ export function StudentDetailPage() {
           </Card>
         </div>
       </div>
+
+      <LeaveFormModal
+        personType="student" personId={student.id}
+        open={leaveOpen} onClose={() => setLeaveOpen(false)}
+        onSaved={onLeaveSaved}
+      />
     </div>
   );
 }
 
 function Row({ label, value }: { label: string; value: string }) {
-  return <div className="flex items-center justify-between gap-3"><dt className="text-slate-muted">{label}</dt><dd className="font-medium text-navy text-right">{value}</dd></div>;
+  return <div className="flex items-center justify-between gap-3"><dt className="text-slate-muted">{label}</dt><dd className="font-medium text-ink text-right">{value}</dd></div>;
 }
-function Stat({ label, value }: { label: string; value: number }) {
-  return <div><p className="text-xs text-slate-muted">{label}</p><p className="text-xl font-bold text-navy mt-0.5">{value}</p></div>;
-}
-function Th({ children }: { children: React.ReactNode }) { return <th className="px-4 py-2 text-left font-semibold text-navy">{children}</th>; }
-function Td({ children }: { children: React.ReactNode }) { return <td className="px-4 py-2.5 text-navy">{children}</td>; }
+function Th({ children }: { children: React.ReactNode }) { return <th className="px-4 py-2 text-left font-semibold text-ink">{children}</th>; }
+function Td({ children }: { children: React.ReactNode }) { return <td className="px-4 py-2.5 text-ink">{children}</td>; }

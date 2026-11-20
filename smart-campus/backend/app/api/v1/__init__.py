@@ -10,6 +10,7 @@ from app.api.v1 import (
     examinations,
     fees,
     grading,
+    leave,
     materials,
     notices,
     reports,
@@ -32,6 +33,7 @@ api_router.include_router(grading.router)
 api_router.include_router(fees.router)
 api_router.include_router(materials.router)
 api_router.include_router(notices.router)
+api_router.include_router(leave.router)
 api_router.include_router(dashboard.router)
 api_router.include_router(reports.router)
 api_router.include_router(audit.router)

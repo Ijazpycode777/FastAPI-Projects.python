@@ -67,10 +67,14 @@ class StudentCreateIn(BaseModel):
     date_of_birth: date | None = None
     gender: str | None = Field(default=None, pattern="^(male|female|other)$")
     admission_date: date
-    program_id: str
-    class_id: str
-    section_id: str
-    academic_session_id: str
+    # Free-text placement: the admin types names (like a username — no fixed
+    # dropdown values). The service find-or-creates the underlying
+    # program/class/section/session rows so attendance, timetable and marks
+    # (which join on the real foreign keys) keep working.
+    program: str = Field(min_length=1, max_length=120)
+    class_name: str = Field(min_length=1, max_length=60)
+    section: str = Field(min_length=1, max_length=16)
+    academic_session: str = Field(min_length=1, max_length=40)
     password: str = Field(min_length=10, max_length=128)
     guardian: GuardianIn | None = None
     # Optional prior board records captured at admission
@@ -105,6 +109,12 @@ class StudentUpdateIn(BaseModel):
     date_of_birth: date | None = None
     gender: str | None = Field(default=None, pattern="^(male|female|other)$")
     account_status: str | None = Field(default=None, pattern="^(active|inactive|graduated|left|suspended)$")
+    # Free-text placement (optional). If any of these is set, the service
+    # find-or-creates the resolved rows and updates the student's placement.
+    program: str | None = Field(default=None, min_length=1, max_length=120)
+    class_name: str | None = Field(default=None, min_length=1, max_length=60)
+    section: str | None = Field(default=None, min_length=1, max_length=16)
+    academic_session: str | None = Field(default=None, min_length=1, max_length=40)
 
 
 class StudentOut(ORMBase):

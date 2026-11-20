@@ -24,12 +24,12 @@ export function TimetablePage() {
         <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-3">
           {DAYS.slice(0, 5).map((day) => (
             <Card key={day}>
-              <div className="px-4 py-3 border-b border-slate-border capitalize font-semibold text-navy text-sm">{day}</div>
+              <div className="px-4 py-3 border-b border-slate-border capitalize font-semibold text-ink text-sm">{day}</div>
               <div className="p-3 space-y-2 min-h-[120px]">
                 {byDay[day].length ? byDay[day].map((e) => (
                   <div key={e.id} className="rounded-lg bg-slate-bg p-2.5 border border-slate-border">
                     <p className="text-xs font-semibold text-indigo">{formatTime(e.start_time)} – {formatTime(e.end_time)}</p>
-                    <p className="text-sm text-navy mt-0.5 truncate">{e.subject_name || e.subject_id.slice(0, 8)}</p>
+                    <p className="text-sm text-ink mt-0.5 truncate">{e.subject_name || e.subject_id.slice(0, 8)}</p>
                     {e.classroom_number && <p className="text-[11px] text-slate-muted">Room {e.classroom_number}</p>}
                   </div>
                 )) : <p className="text-xs text-slate-muted text-center py-6">No lectures</p>}

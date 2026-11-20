@@ -19,7 +19,7 @@ export function FeeListPage() {
   });
 
   const columns: Column<FeeInvoice>[] = [
-    { key: "invoice_number", header: "Invoice", render: (i) => <span className="font-medium text-navy">{i.invoice_number}</span> },
+    { key: "invoice_number", header: "Invoice", render: (i) => <span className="font-medium text-ink">{i.invoice_number}</span> },
     { key: "student_id", header: "Student", render: (i) => <span className="text-slate-muted">{i.student_id.slice(0, 8)}</span> },
     { key: "amount", header: "Amount", render: (i) => formatCurrency(i.amount) },
     { key: "issued_date", header: "Issued", render: (i) => formatDate(i.issued_date) },

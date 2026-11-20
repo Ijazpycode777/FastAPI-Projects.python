@@ -66,10 +66,10 @@ function ToastViewport({ toasts, dismiss }: { toasts: Toast[]; dismiss: (id: num
         >
           <span className={`mt-1 h-2 w-2 shrink-0 rounded-full ${TONE_DOT[t.tone]}`} />
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-navy">{t.title}</p>
+            <p className="text-sm font-semibold text-ink">{t.title}</p>
             {t.description && <p className="mt-0.5 text-xs text-slate-muted">{t.description}</p>}
           </div>
-          <button onClick={() => dismiss(t.id)} className="text-slate-muted hover:text-navy text-sm" aria-label="Dismiss">
+          <button onClick={() => dismiss(t.id)} className="text-slate-muted hover:text-ink text-sm" aria-label="Dismiss">
             ✕
           </button>
         </div>
