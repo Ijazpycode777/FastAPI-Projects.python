@@ -13,6 +13,7 @@ from app.models.people import Teacher
 from app.models.timetable import TimetableEntry, TimetablePeriod
 from app.repositories.audit import record_audit
 from app.services.timetable_conflict import EntryRef, conflict_reason, find_conflict
+from app.utils.helpers import pg_advisory_xact_lock, stable_lock_key
 
 
 async def create_period(db: AsyncSession, actor, **kw) -> TimetablePeriod:
@@ -46,13 +47,20 @@ async def create_entry(db: AsyncSession, actor, data: dict[str, Any]) -> Timetab
     if (await db.execute(stmt)).scalar_one_or_none() is None:
         raise ForbiddenError("Teacher is not assigned to this subject/class/section.")
 
-    # Pull same-day candidates for conflict detection.
+    # Serialize conflict detection for this (teacher, day) so two concurrent
+    # create_entry calls cannot both read an empty conflict set and insert
+    # overlapping entries (double-booking a teacher or classroom). The advisory
+    # lock is held until commit; the candidate rows are also locked (FOR UPDATE)
+    # on Postgres as a second line of defense.
+    await pg_advisory_xact_lock(
+        db, stable_lock_key("tt_conflict", str(data["teacher_id"]), data["day_of_week"])
+    )
     candidates = await db.execute(
         select(TimetableEntry).where(
             TimetableEntry.academic_session_id == data["academic_session_id"],
             TimetableEntry.day_of_week == data["day_of_week"],
             TimetableEntry.is_cancelled.is_(False),
-        )
+        ).with_for_update()
     )
     existing = [
         EntryRef(
@@ -97,7 +105,7 @@ async def cancel_entry(db: AsyncSession, actor, entry: TimetableEntry) -> Timeta
 async def update_entry(db: AsyncSession, actor, entry: TimetableEntry, data: dict[str, Any]) -> TimetableEntry:
     """Update a scheduled lecture and re-run conflict validation (excluding self)."""
     for k in ("day_of_week", "start_time", "end_time", "subject_id", "teacher_id",
-              "class_id", "section_id", "classroom_id", "period_name", "campus_shift_id"):
+              "class_id", "section_id", "classroom_id", "period_name"):
         if data.get(k) is not None:
             setattr(entry, k, data[k])
     if entry.end_time <= entry.start_time:

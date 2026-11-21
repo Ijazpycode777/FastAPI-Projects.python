@@ -30,7 +30,6 @@ starlette-csrf==3.0.0         # CSRF middleware (alternative custom impl below)
 python-dateutil==2.9.0.post0
 pytz==2024.2
 pillow==11.0.0                # image content-type validation
-python-magic==0.4.27          # real content-type sniffing for uploads
 openpyxl==3.1.5               # Excel exports
 reportlab==4.2.5              # PDF exports
 httpx==0.28.1                 # async test client

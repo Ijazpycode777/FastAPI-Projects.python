@@ -33,12 +33,16 @@ class Settings(BaseSettings):
     session_cookie_name: str = "smartcampus_session"
     session_secret_key: str = "change-me-to-a-long-random-string"
     session_max_age_seconds: int = 28800
-    session_cookie_secure: bool = False
+    # Secure by default. The flag is ANDed with a per-request HTTPS check in
+    # sessions.py, so dev over plain HTTP still works (the attribute is only
+    # emitted on HTTPS). Production deployments get the Secure attribute without
+    # needing to remember the env var (defense-in-depth alongside render.yaml).
+    session_cookie_secure: bool = True
     session_cookie_samesite: str = Field("lax", pattern="^(lax|strict|none)$")
 
     # CSRF
     csrf_cookie_name: str = "smartcampus_csrf"
-    csrf_secure: bool = False
+    csrf_secure: bool = True
 
     # CORS — stored as a CSV string so plain env values work without JSON.
     cors_allowed_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
@@ -77,6 +81,11 @@ class Settings(BaseSettings):
     # Seeding
     seed_admin_email: str = "admin@smartcampus.edu"
     seed_admin_password: str = "ChangeMe!2025"
+    # When True, bootstrap re-syncs the existing admin's password to
+    # SEED_ADMIN_PASSWORD on startup (operator-initiated env rotation). Default
+    # False: an existing admin's in-app password rotation is preserved across
+    # restarts.
+    seed_admin_password_reset: bool = False
     seed_reset_on_start: bool = False
 
     @property

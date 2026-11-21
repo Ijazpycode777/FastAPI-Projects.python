@@ -49,13 +49,13 @@ async def record_audit(
         user_agent=user_agent,
     )
     # The audit log records an action that has ALREADY happened (the caller
-    # flushed the business object — e.g. the new campus shift — before calling
+    # flushed the business object — e.g. the new student — before calling
     # us). It is a non-critical, append-only record and must NEVER break the
     # business operation it describes. Writing it inside a SAVEPOINT isolates the
     # audit insert: if it fails for any reason (missing/stale table, FK or DB
     # error, unique violation) only the audit row is rolled back — the caller's
-    # transaction (and the shift it already created) stays intact and commits.
-    # The failure is logged loudly so it is never silently swallowed.
+    # transaction (and the business object it already created) stays intact and
+    # commits. The failure is logged loudly so it is never silently swallowed.
     try:
         async with db.begin_nested():
             db.add(entry)

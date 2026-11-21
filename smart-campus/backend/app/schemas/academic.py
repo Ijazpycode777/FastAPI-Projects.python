@@ -100,3 +100,13 @@ class ClassroomOut(ORMBase):
     building: str | None = None
     capacity: int
     is_active: bool
+
+
+class AssignmentIn(BaseModel):
+    """Validate the teacher-assignment payload (was a raw ``dict`` that raised a
+    generic 500 + dev message leak on missing keys)."""
+    teacher_id: str = Field(min_length=1)
+    subject_id: str = Field(min_length=1)
+    class_id: str = Field(min_length=1)
+    section_id: str | None = None
+    academic_session_id: str = Field(min_length=1)

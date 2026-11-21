@@ -7,7 +7,7 @@
  *   on every endpoint regardless of these client-side guards.
  */
 import { lazy, Suspense } from "react";
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { AppLayout } from "@/layouts/AppLayout";
 import { FullPageLoader } from "@/components/common/FullPageLoader";
@@ -25,13 +25,13 @@ const StudentFormPage = lazy(() => import("@/features/students/StudentFormPage")
 const TeacherListPage = lazy(() => import("@/features/teachers/TeacherListPage").then((m) => ({ default: m.TeacherListPage })));
 const TeacherDetailPage = lazy(() => import("@/features/teachers/TeacherDetailPage").then((m) => ({ default: m.TeacherDetailPage })));
 const TeacherFormPage = lazy(() => import("@/features/teachers/TeacherFormPage").then((m) => ({ default: m.TeacherFormPage })));
-const ShiftsPage = lazy(() => import("@/features/campus/ShiftsPage").then((m) => ({ default: m.ShiftsPage })));
-const RollSchemesPage = lazy(() => import("@/features/campus/RollSchemesPage").then((m) => ({ default: m.RollSchemesPage })));
 const AttendanceMarkingPage = lazy(() => import("@/features/attendance/AttendanceMarkingPage").then((m) => ({ default: m.AttendanceMarkingPage })));
 const AttendanceHistoryPage = lazy(() => import("@/features/attendance/AttendanceHistoryPage").then((m) => ({ default: m.AttendanceHistoryPage })));
 const ExaminationListPage = lazy(() => import("@/features/examinations/ExaminationListPage").then((m) => ({ default: m.ExaminationListPage })));
+const ExaminationFormPage = lazy(() => import("@/features/examinations/ExaminationFormPage").then((m) => ({ default: m.ExaminationFormPage })));
 const MarksEntryPage = lazy(() => import("@/features/examinations/MarksEntryPage").then((m) => ({ default: m.MarksEntryPage })));
 const ResultsPage = lazy(() => import("@/features/results/ResultsPage").then((m) => ({ default: m.ResultsPage })));
+const ChangePasswordPage = lazy(() => import("@/features/authentication/ChangePasswordPage").then((m) => ({ default: m.ChangePasswordPage })));
 const FeeListPage = lazy(() => import("@/features/fees/FeeListPage").then((m) => ({ default: m.FeeListPage })));
 const InvoiceDetailPage = lazy(() => import("@/features/fees/InvoiceDetailPage").then((m) => ({ default: m.InvoiceDetailPage })));
 const TimetablePage = lazy(() => import("@/features/timetable/TimetablePage").then((m) => ({ default: m.TimetablePage })));
@@ -51,8 +51,15 @@ function HomeRedirect() {
 
 function Protected({ roles, children }: { roles?: Role[]; children: React.ReactNode }) {
   const { profile, loading } = useAuth();
+  const location = useLocation();
   if (loading) return <FullPageLoader />;
   if (!profile) return <Navigate to="/login" replace />;
+  // Backend enforces the must-reset gate on every non-auth endpoint; the
+  // client-side guard just keeps the user on /change-password so they can
+  // reach it without being bounced around by 403s from other routes.
+  if (profile.user.must_reset_password && location.pathname !== "/change-password") {
+    return <Navigate to="/change-password" replace />;
+  }
   if (roles && !roles.includes(profile.user.role as Role)) return <ForbiddenPage />;
   return <>{children}</>;
 }
@@ -81,18 +88,18 @@ export function AppRoutes() {
           <Route path="teachers/new" element={<Protected roles={["admin"]}><TeacherFormPage /></Protected>} />
           <Route path="teachers/:id" element={<Protected roles={["admin"]}><TeacherDetailPage /></Protected>} />
 
-          {/* Campus shifts & roll-number schemes */}
-          <Route path="campus/shifts" element={<Protected roles={["admin"]}><ShiftsPage /></Protected>} />
-          <Route path="campus/roll-schemes" element={<Protected roles={["admin"]}><RollSchemesPage /></Protected>} />
-
           {/* Attendance */}
           <Route path="attendance/mark" element={<Protected roles={["teacher"]}><AttendanceMarkingPage /></Protected>} />
           <Route path="attendance" element={<Protected><AttendanceHistoryPage /></Protected>} />
 
           {/* Examinations & results */}
           <Route path="examinations" element={<Protected roles={["admin", "teacher"]}><ExaminationListPage /></Protected>} />
+          <Route path="examinations/new" element={<Protected roles={["admin"]}><ExaminationFormPage /></Protected>} />
           <Route path="examinations/:id/marks" element={<Protected roles={["admin", "teacher"]}><MarksEntryPage /></Protected>} />
           <Route path="results" element={<Protected><ResultsPage /></Protected>} />
+
+          {/* Account */}
+          <Route path="change-password" element={<Protected><ChangePasswordPage /></Protected>} />
 
           {/* Fees */}
           <Route path="fees" element={<Protected roles={["admin"]}><FeeListPage /></Protected>} />

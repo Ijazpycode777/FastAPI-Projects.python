@@ -35,7 +35,6 @@ class TeacherCreateIn(BaseModel):
     department: str | None = None
     designation: str = "Lecturer"
     joining_date: date
-    campus_shift_id: str | None = None
     password: str = Field(min_length=10, max_length=128)
 
 
@@ -45,7 +44,6 @@ class TeacherUpdateIn(BaseModel):
     department: str | None = None
     designation: str | None = None
     employment_status: str | None = None
-    campus_shift_id: str | None = None
 
 
 class TeacherOut(ORMBase):
@@ -59,7 +57,6 @@ class TeacherOut(ORMBase):
     designation: str
     joining_date: date
     employment_status: str
-    campus_shift_id: str | None = None
 
 
 # ---------------- Student ----------------
@@ -70,11 +67,6 @@ class StudentCreateIn(BaseModel):
     date_of_birth: date | None = None
     gender: str | None = Field(default=None, pattern="^(male|female|other)$")
     admission_date: date
-    # Campus shift — every student belongs to a shift (manually chosen).
-    campus_shift_id: str
-    # Roll numbers are manually assigned by administrators and are unique
-    # within the chosen campus shift.
-    roll_number: int = Field(ge=1)
     # Free-text placement: the admin types names (like a username — no fixed
     # dropdown values). The service find-or-creates the underlying
     # program/class/section/session rows so attendance, timetable and marks
@@ -117,8 +109,6 @@ class StudentUpdateIn(BaseModel):
     date_of_birth: date | None = None
     gender: str | None = Field(default=None, pattern="^(male|female|other)$")
     account_status: str | None = Field(default=None, pattern="^(active|inactive|graduated|left|suspended)$")
-    campus_shift_id: str | None = None
-    roll_number: int | None = Field(default=None, ge=1)
     # Free-text placement (optional). If any of these is set, the service
     # find-or-creates the resolved rows and updates the student's placement.
     program: str | None = Field(default=None, min_length=1, max_length=120)
@@ -143,7 +133,6 @@ class StudentOut(ORMBase):
     current_section_id: str | None = None
     current_session_id: str | None = None
     current_roll_number: int | None = None
-    campus_shift_id: str | None = None
 
 
 class StudentDetailOut(StudentOut):
@@ -152,7 +141,6 @@ class StudentDetailOut(StudentOut):
     class_name: str | None = None
     section_name: str | None = None
     session_name: str | None = None
-    campus_shift_name: str | None = None
 
 
 class BoardRecordIn(BaseModel):
@@ -192,20 +180,18 @@ class EnrolmentOut(ORMBase):
     class_id: str
     section_id: str
     roll_number: int
-    campus_shift_id: str | None = None
     is_active: bool
 
 
 class PromoteIn(BaseModel):
     """Promote a student to a new class/section/session.
 
-    The new roll number is provided manually (roll numbers are never auto-generated).
+    The new roll number is auto-assigned within the target (session, section).
     """
     student_id: str
     new_academic_session_id: str
     new_class_id: str
     new_section_id: str
     new_program_id: str | None = None
-    new_roll_number: int = Field(ge=1)
     action: str = Field(default="promoted", pattern="^(promoted|repeated|section_change)$")
     note: str | None = None

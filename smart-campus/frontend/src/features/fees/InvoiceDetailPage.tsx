@@ -33,7 +33,7 @@ export function InvoiceDetailPage() {
 
   const payMutation = useMutation({
     mutationFn: () => http.post<Payment>("/fees/payments", { invoice_id: invoiceId, amount: Number(payment.amount), method: payment.method, paid_at: payment.paid_at, reference: payment.reference || null }),
-    onSuccess: () => { toast.success("Payment recorded"); setPayment({ ...payment, amount: "", reference: "" }); qc.invalidateQueries({ queryKey: ["invoice", invoiceId] }); },
+    onSuccess: () => { toast.success("Payment recorded"); setPayment({ ...payment, amount: "", reference: "" }); qc.invalidateQueries({ queryKey: ["invoice", invoiceId] }); qc.invalidateQueries({ queryKey: ["invoices"] }); },
     onError: (e: unknown) => toast.error("Could not record payment", (e as Error).message),
   });
 

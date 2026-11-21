@@ -37,7 +37,13 @@ export function MarksEntryPage() {
 
   const finalize = useMutation({
     mutationFn: () => http.post(`/examinations/${id}/finalize`),
-    onSuccess: () => { toast.success("Examination finalized"); qc.invalidateQueries({ queryKey: ["exam", id] }); },
+    onSuccess: () => {
+      toast.success("Examination finalized");
+      qc.invalidateQueries({ queryKey: ["exam", id] });
+      qc.invalidateQueries({ queryKey: ["examinations"] });
+      qc.invalidateQueries({ queryKey: ["exams-for-results"] });
+      qc.invalidateQueries({ queryKey: ["my-marks"] });
+    },
     onError: (e: unknown) => toast.error("Could not finalize", (e as Error).message),
   });
 
@@ -59,7 +65,7 @@ export function MarksEntryPage() {
         <Badge status={e.status}>{e.status}</Badge>
         {!isFinalized && <button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending} className="btn-primary"><Save size={16} /> {saveMutation.isPending ? "Saving…" : "Save Marks"}</button>}
         {e.status === "published" && <button onClick={() => finalize.mutate()} disabled={finalize.isPending} className="btn-danger"><Lock size={16} /> Finalize</button>}
-        {e.status === "draft" && <button onClick={async () => { await http.post(`/examinations/${id}/publish`); toast.success("Published"); exam.refetch(); }} className="btn-secondary"><Send size={16} /> Publish</button>}
+        {e.status === "draft" && <button onClick={async () => { try { await http.post(`/examinations/${id}/publish`); toast.success("Published"); qc.invalidateQueries({ queryKey: ["exam", id] }); qc.invalidateQueries({ queryKey: ["examinations"] }); qc.invalidateQueries({ queryKey: ["exams-for-results"] }); qc.invalidateQueries({ queryKey: ["my-marks"] }); exam.refetch(); } catch (err) { toast.error((err as Error)?.message ?? "Action failed"); } }} className="btn-secondary"><Send size={16} /> Publish</button>}
       </div>
 
       <Card>
@@ -79,7 +85,6 @@ export function MarksEntryPage() {
               <tbody>
                 {students.data?.map((s, i) => {
                   const em = existing.data?.find((x) => x.student_id === s.id);
-                  const cur = marks[s.id];
                   return (
                     <tr key={s.id} className="border-b border-slate-border last:border-0">
                       <td className="px-4 py-2.5 text-slate-muted">{i + 1}</td>

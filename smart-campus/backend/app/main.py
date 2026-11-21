@@ -49,8 +49,36 @@ log = logging.getLogger("smartcampus")
 log.setLevel(getattr(logging, settings.app_log_level.upper(), logging.INFO))
 
 
+def _validate_production_security() -> None:
+    """Fail-closed startup checks for production.
+
+    Refuse to boot with insecure defaults that would otherwise silently weaken
+    security (known session-secret default, localhost/empty CORS with
+    credentials). Non-production skips these so local dev keeps working.
+    """
+    if not settings.is_production:
+        return
+    if not settings.session_secret_key or settings.session_secret_key == "change-me-to-a-long-random-string":
+        raise RuntimeError(
+            "SESSION_SECRET_KEY is unset or the built-in default in production; "
+            "set a strong, unique secret before deploying."
+        )
+    origins = settings.allowed_origin_set()
+    if not origins:
+        raise RuntimeError(
+            "CORS_ALLOWED_ORIGINS is empty in production; set the allowed frontend origin(s)."
+        )
+    bad = sorted({o for o in origins if "localhost" in o or "127.0.0.1" in o})
+    if bad:
+        raise RuntimeError(
+            f"CORS_ALLOWED_ORIGINS contains dev-only host(s) {bad} in production; "
+            "set the real frontend origin(s)."
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    _validate_production_security()
     # Always ensure a usable administrator exists — including in production,
     # where demo seeding is disabled. This is the documented first-admin
     # bootstrap: it creates the admin from SEED_ADMIN_EMAIL/SEED_ADMIN_PASSWORD
@@ -94,10 +122,15 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # Order matters: outermost first.
+    # Starlette wraps each newly-added middleware around the previous one, so
+    # the LAST added is OUTERMOST. We want RequestId + SecurityHeaders outermost
+    # so they decorate EVERY response (including CSRF 403s and CORS preflight),
+    # CORS next (preflight handled before auth), and CSRF innermost of these four
+    # so its rejections still receive a request-id and security headers. Add
+    # order is therefore the reverse of the desired outer->inner order.
+    app.add_middleware(CSRFMiddleware)
     app.add_middleware(RequestIdMiddleware)
     app.add_middleware(SecurityHeadersMiddleware)
-    app.add_middleware(CSRFMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=list(settings.allowed_origin_set()),

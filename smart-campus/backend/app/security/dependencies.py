@@ -13,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.exceptions import ForbiddenError, UnauthenticatedError
+from app.core.exceptions import AppException, ForbiddenError, UnauthenticatedError
 from app.database.session import get_db
 from app.models.user import User
 from app.models.session import Session as SessionModel
@@ -48,6 +48,25 @@ async def get_current_user(
     user = user_result.scalar_one_or_none()
     if user is None or not user.is_active:
         raise UnauthenticatedError("Account is unavailable.")
+
+    # Enforce a forced password reset: an account flagged must_reset_password
+    # may only call the password-change / profile / logout / csrf endpoints
+    # until it changes its password. Prevents a reset/temporary credential from
+    # being used to read or modify data.
+    if getattr(user, "must_reset_password", False):
+        path = request.url.path
+        _reset_allowed = {
+            f"{settings.api_v1_prefix}/auth/password",
+            f"{settings.api_v1_prefix}/auth/me",
+            f"{settings.api_v1_prefix}/auth/logout",
+            f"{settings.api_v1_prefix}/auth/csrf",
+        }
+        if path not in _reset_allowed:
+            raise AppException(
+                "Password reset required before continuing.",
+                status_code=403,
+                code="PASSWORD_RESET_REQUIRED",
+            )
 
     request.state.session_id = session.id
     request.state.user = user

@@ -18,6 +18,7 @@ from app.schemas.attendance import (
 )
 from app.security.dependencies import get_current_user, require_admin, require_staff, require_student
 from app.services import attendance_service
+from app.services.academic_service import teacher_assigned_to_class
 
 router = APIRouter(prefix="/attendance", tags=["attendance"])
 
@@ -70,6 +71,10 @@ async def class_attendance(
     user: User = Depends(require_staff()),
     db: AsyncSession = Depends(get_db),
 ):
+    if user.role == "teacher":
+        teacher_id = str(user.teacher_profile.id) if getattr(user, "teacher_profile", None) else None
+        if not teacher_id or not await teacher_assigned_to_class(db, teacher_id, class_id):
+            raise ForbiddenError("You can only view attendance for classes you teach.")
     return await attendance_service.class_summary(db, class_id, section_id, on)
 
 

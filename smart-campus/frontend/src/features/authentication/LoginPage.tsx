@@ -34,8 +34,12 @@ export function LoginPage() {
     try {
       const profile = await login(values.email, values.password);
       toast.success("Welcome back", profile.user.full_name);
-      const role = profile.user.role;
-      navigate(role === "admin" ? "/admin" : role === "teacher" ? "/teacher" : "/student", { replace: true });
+      // useAuth.login already routes to /change-password when must_reset_password
+      // is set; only navigate to the role dashboard otherwise.
+      if (!profile.user.must_reset_password) {
+        const role = profile.user.role;
+        navigate(role === "admin" ? "/admin" : role === "teacher" ? "/teacher" : "/student", { replace: true });
+      }
     } catch (e) {
       const err = e as ApiError;
       setServerError(err.message ?? "Login failed. Please try again.");

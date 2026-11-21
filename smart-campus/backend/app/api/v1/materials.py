@@ -6,13 +6,14 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import ForbiddenError, NotFoundError
 from app.database.session import get_db
 from app.models.materials import StudyMaterial
 from app.models.user import User
 from app.schemas.materials import StudyMaterialOut
 from app.security.dependencies import get_current_user, require_staff, require_student
 from app.services import material_service
+from app.services.academic_service import teacher_authorized_for
 
 router = APIRouter(prefix="/materials", tags=["materials"])
 
@@ -70,6 +71,15 @@ async def delete(material_id: str, user: User = Depends(require_staff()), db: As
     material = await db.get(StudyMaterial, material_id)
     if material is None:
         raise NotFoundError("Study material not found.")
+    if user.role == "teacher":
+        teacher_id = str(user.teacher_profile.id) if getattr(user, "teacher_profile", None) else None
+        owns = str(getattr(material, "uploaded_by", "")) == str(user.id)
+        authz = bool(teacher_id) and await teacher_authorized_for(
+            db, teacher_id, str(material.subject_id), str(material.class_id),
+            str(material.section_id) if material.section_id else None,
+        )
+        if not (owns or authz):
+            raise ForbiddenError("You can only delete materials you uploaded or that target your assigned classes.")
     material.is_active = False
     await db.commit()
     return {"message": "Material removed."}

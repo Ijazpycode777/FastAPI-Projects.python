@@ -3,23 +3,24 @@ import {
   BarChart, Bar, PieChart, Pie, Cell, AreaChart, Area,
 } from "recharts";
 
-// Premium ERP palette — indigo→violet primary with vibrant SaaS accents.
-export const CHART_COLORS = ["#4F46E5", "#10B981", "#F59E0B", "#EF4444", "#7C3AED", "#3B82F6"];
+// Premium ERP palette — navy→deep-purple primary with refined SaaS accents,
+// aligned to the Smart Campus design tokens.
+export const CHART_COLORS = ["#6041C8", "#18A879", "#E8A23A", "#E05262", "#301078", "#3999D6"];
 
 // Attendance donut segment colours — present=green, absent=red, leave=grey.
 export const ATTENDANCE_COLORS = {
-  present: "#10B981", // green
-  absent: "#EF4444",  // red
-  leave: "#9CA3AF",   // grey
+  present: "#18A879", // green
+  absent: "#E05262",  // red
+  leave: "#9CA0B5",   // grey
 } as const;
 
-const axisStyle = { fontSize: 11, fill: "#6B7280" };
-const gridStroke = "#EEF1F7";
-const tooltipStyle = { borderRadius: 12, border: `1px solid #E9EDF5`, fontSize: 12, boxShadow: "0 8px 24px rgba(23,30,60,0.10)" };
+const axisStyle = { fontSize: 11, fill: "#73758A" };
+const gridStroke = "#EEF0F7";
+const tooltipStyle = { borderRadius: 12, border: `1px solid #E8E8F0`, fontSize: 12, boxShadow: "0 8px 24px rgba(33,20,91,0.10)" };
 
 interface SeriesProps { data: { label: string; value: number }[]; color?: string; height?: number; }
 
-export function TrendLineChart({ data, color = "#4F46E5", height = 240 }: SeriesProps) {
+export function TrendLineChart({ data, color = "#6041C8", height = 240 }: SeriesProps) {
   return (
     <ResponsiveContainer width="100%" height={height}>
       <LineChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: -16 }}>
@@ -51,14 +52,14 @@ export function CategoryBarChart({ data, height = 240 }: SeriesProps) {
 
 // Horizontal bars — for long class/section labels (admin class comparison,
 // teacher class distribution).
-export function HorizontalBarChart({ data, height = 240, color = "#4F46E5" }: SeriesProps & { color?: string }) {
+export function HorizontalBarChart({ data, height = 240, color = "#6041C8" }: SeriesProps & { color?: string }) {
   return (
     <ResponsiveContainer width="100%" height={height}>
       <BarChart layout="vertical" data={data} margin={{ top: 4, right: 16, bottom: 4, left: 24 }}>
         <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} horizontal={false} />
         <XAxis type="number" tick={axisStyle} tickLine={false} axisLine={false} />
         <YAxis type="category" dataKey="label" tick={axisStyle} tickLine={false} axisLine={false} width={120} />
-        <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "#F5F7FA" }} />
+        <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "#F6F7FC" }} />
         <Bar dataKey="value" radius={[0, 6, 6, 0]} fill={color} />
       </BarChart>
     </ResponsiveContainer>
@@ -80,7 +81,7 @@ export function DistributionDonut({ data, height = 240 }: { data: { label: strin
   );
 }
 
-export function TrendAreaChart({ data, color = "#10B981", height = 240 }: SeriesProps) {
+export function TrendAreaChart({ data, color = "#18A879", height = 240 }: SeriesProps) {
   return (
     <ResponsiveContainer width="100%" height={height}>
       <AreaChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: -16 }}>
@@ -97,6 +98,50 @@ export function TrendAreaChart({ data, color = "#10B981", height = 240 }: Series
         <Area type="monotone" dataKey="value" stroke={color} strokeWidth={2.5} fill="url(#areaFill)" />
       </AreaChart>
     </ResponsiveContainer>
+  );
+}
+
+// ---------------- Circular progress ring (Part 8.2) ----------------
+// For fee-status / collection-rate visualizations. Ring thickness ~10% of
+// diameter, rounded stroke ends, muted background track, smooth animated arc.
+// Pure SVG (no recharts) for precise geometry + lightweight rendering.
+interface ProgressRingProps {
+  value: number;          // 0..100
+  size?: number;          // px (desktop ~180, mobile ~140)
+  stroke?: number;        // ring thickness (defaults to ~10% of size)
+  color?: string;         // arc colour (defaults to accent)
+  track?: string;         // background track colour
+  label?: string;         // small caption under the centred value
+  centerValue?: string;   // override the centred text (e.g. currency)
+}
+
+export function ProgressRing({
+  value, size = 180, stroke, color = "#6041C8", track = "#EEF0F7", label, centerValue,
+}: ProgressRingProps) {
+  const r = size / 2;
+  const thickness = stroke ?? Math.max(10, Math.round(size * 0.1));
+  const radius = r - thickness / 2;
+  const circ = 2 * Math.PI * radius;
+  const pct = Math.max(0, Math.min(100, value));
+  const offset = circ - (pct / 100) * circ;
+  return (
+    <div className="flex flex-col items-center" role="img" aria-label={`${label ?? "Progress"} ${Math.round(pct)}%`}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="max-w-full">
+        <circle cx={r} cy={r} r={radius} fill="none" stroke={track} strokeWidth={thickness} />
+        <circle
+          cx={r} cy={r} r={radius} fill="none" stroke={color} strokeWidth={thickness}
+          strokeLinecap="round"
+          strokeDasharray={circ} strokeDashoffset={offset}
+          transform={`rotate(-90 ${r} ${r})`}
+          style={{ transition: "stroke-dashoffset 600ms ease-out" }}
+        />
+        <text x="50%" y="50%" textAnchor="middle" dominantBaseline="central"
+              style={{ fontSize: size * 0.22, fontWeight: 700, fill: "#202033" }}>
+          {centerValue ?? `${Math.round(pct)}%`}
+        </text>
+      </svg>
+      {label && <p className="mt-2 text-xs text-slate-muted">{label}</p>}
+    </div>
   );
 }
 

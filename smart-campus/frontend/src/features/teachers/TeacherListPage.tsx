@@ -7,7 +7,6 @@ import { DataTable, type Column } from "@/components/tables/DataTable";
 import { Select } from "@/components/forms";
 import { useDebounce } from "@/hooks/useDebounce";
 import { http } from "@/lib/api";
-import { useShifts } from "@/features/campus/queries";
 import type { Page, Teacher, Subject } from "@/types";
 import { formatDate } from "@/lib/utils";
 
@@ -16,7 +15,6 @@ const STATUS_OPTS = ["active", "inactive", "on_leave"];
 export function TeacherListPage() {
   const navigate = useNavigate();
   const [q, setQ] = useState("");
-  const [shiftId, setShiftId] = useState("");
   const [subjectId, setSubjectId] = useState("");
   const [status, setStatus] = useState("");
   const [sortKey, setSortKey] = useState("created_at");
@@ -24,22 +22,20 @@ export function TeacherListPage() {
   const [page, setPage] = useState(1);
   const debounced = useDebounce(q, 300);
 
-  const { data: shifts } = useShifts();
   const subjects = useQuery({ queryKey: ["subjects"], queryFn: () => http.get<Subject[]>("/subjects") });
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ["teachers", { q: debounced, campus_shift_id: shiftId, subject_id: subjectId, status, sort: sortKey, order: sortDir, page }],
+    queryKey: ["teachers", { q: debounced, subject_id: subjectId, status, sort: sortKey, order: sortDir, page }],
     queryFn: () => http.get<Page<Teacher>>("/teachers", {
-      q: debounced || undefined, campus_shift_id: shiftId || undefined,
+      q: debounced || undefined,
       subject_id: subjectId || undefined, status: status || undefined,
       sort: sortKey, order: sortDir, page, page_size: 20,
     }),
     placeholderData: (prev) => prev,
   });
 
-  const hasFilters = !!(shiftId || subjectId || status || q);
-  const clearFilters = () => { setQ(""); setShiftId(""); setSubjectId(""); setStatus(""); setPage(1); };
-  const shiftName = (id?: string | null) => (id ? shifts?.find((s) => s.id === id)?.name ?? "—" : "—");
+  const hasFilters = !!(subjectId || status || q);
+  const clearFilters = () => { setQ(""); setSubjectId(""); setStatus(""); setPage(1); };
 
   const onSort = (key: string) => {
     const backendKey = key === "full_name" ? "full_name" : "created_at";
@@ -56,7 +52,6 @@ export function TeacherListPage() {
       </div>
     ) },
     { key: "department", header: "Department", render: (t) => <span className="text-slate-muted">{t.department || "—"}</span> },
-    { key: "campus_shift_id", header: "Shift", render: (t) => <span className="text-slate-muted">{shiftName(t.campus_shift_id)}</span> },
     { key: "joining_date", header: "Joined", render: (t) => formatDate(t.joining_date) },
     { key: "employment_status", header: "Status", render: (t) => <Badge status={t.employment_status}>{t.employment_status}</Badge> },
   ];
@@ -65,7 +60,7 @@ export function TeacherListPage() {
     <div>
       <PageHeader
         title="Teacher Logs"
-        description="Search and inspect teachers by name, employee ID, shift, subject and status."
+        description="Search and inspect teachers by name, employee ID, subject and status."
         action={<button onClick={() => navigate("/teachers/new")} className="btn-primary"><Plus size={16} /> Add Teacher</button>}
       />
 
@@ -75,10 +70,6 @@ export function TeacherListPage() {
           <input className="input pl-9" placeholder="Search by name, email or employee ID…" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} />
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-          <Select value={shiftId} onChange={(e) => { setShiftId(e.target.value); setPage(1); }}>
-            <option value="">All shifts</option>
-            {shifts?.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </Select>
           <Select value={subjectId} onChange={(e) => { setSubjectId(e.target.value); setPage(1); }}>
             <option value="">All subjects</option>
             {subjects.data?.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { useQueryClient } from "@tanstack/react-query";
 import { PageHeader, Card, CardHeader } from "@/components/common";
 import { Field, TextInput, Select } from "@/components/forms";
 import { http, ApiError } from "@/lib/api";
@@ -23,6 +24,7 @@ type FormValues = z.infer<typeof schema>;
 export function TeacherFormPage() {
   const navigate = useNavigate();
   const toast = useToast();
+  const queryClient = useQueryClient();
   const [submitting, setSubmitting] = useState(false);
   const { register, handleSubmit, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -34,6 +36,7 @@ export function TeacherFormPage() {
     try {
       await http.post("/teachers", { ...v, phone: v.phone || null, department: v.department || null });
       toast.success("Teacher created");
+      queryClient.invalidateQueries({ queryKey: ["teachers"] });
       navigate("/teachers");
     } catch (e) {
       toast.error("Could not create teacher", (e as ApiError).message);

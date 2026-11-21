@@ -92,3 +92,16 @@ async def teacher_authorized_for(
         stmt = stmt.where(TeacherAssignment.academic_session_id == academic_session_id)
     result = await db.execute(stmt)
     return result.scalar_one_or_none() is not None
+
+
+async def teacher_assigned_to_class(db: AsyncSession, teacher_id: str, class_id: str) -> bool:
+    """True if the teacher has ANY active assignment (any subject/section) for
+    the given class. Used to gate class-wide attendance views."""
+    result = await db.execute(
+        select(TeacherAssignment).where(
+            TeacherAssignment.teacher_id == teacher_id,
+            TeacherAssignment.class_id == class_id,
+            TeacherAssignment.is_active.is_(True),
+        )
+    )
+    return result.scalars().first() is not None

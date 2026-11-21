@@ -41,9 +41,10 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     APP_ENV=production
 
-# Runtime libs needed for psycopg/argon2 and image validation
+# Runtime libs needed for psycopg/argon2. libpq-dev is build-time only
+# (already used in the backend-deps stage); the runtime needs just libpq5.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libpq5 libpq-dev curl \
+    && apt-get install -y --no-install-recommends libpq5 curl \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Copy installed packages from deps stage

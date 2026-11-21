@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import ForbiddenError, NotFoundError
 from app.database.session import get_db
 from app.models.examinations import Examination, StudentMark
 from app.models.user import User
@@ -65,7 +65,23 @@ async def enter_marks(exam_id: str, payload: MarkBulkIn, user: User = Depends(re
 
 @router.get("/{exam_id}/marks", response_model=list[StudentMarkOut])
 async def list_marks(exam_id: str, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    rows = await db.execute(select(StudentMark).where(StudentMark.examination_id == exam_id))
+    exam = await db.get(Examination, exam_id)
+    if exam is None:
+        raise NotFoundError("Examination not found.")
+    if user.role == "student":
+        # Students see only their own marks, and only once results are released.
+        if exam.status == "draft":
+            raise ForbiddenError("Results are not available for this examination.")
+        student_id = str(user.student_profile.id) if getattr(user, "student_profile", None) else None
+        if not student_id:
+            raise ForbiddenError("Student profile not found.")
+        rows = await db.execute(select(StudentMark).where(
+            StudentMark.examination_id == exam_id, StudentMark.student_id == student_id,
+        ))
+    else:
+        # Staff: teachers must be authorized for the exam; admins see all.
+        await exam_service.assert_teacher_can_manage_exam(db, user, exam)
+        rows = await db.execute(select(StudentMark).where(StudentMark.examination_id == exam_id))
     return [StudentMarkOut.model_validate(r) for r in rows.scalars().all()]
 
 

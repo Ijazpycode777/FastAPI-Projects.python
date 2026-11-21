@@ -7,7 +7,6 @@ async def _create_student(admin_client, setup, email="student.s1@test.edu", n=1)
         "full_name": "Student One", "email": email, "phone": "+923000000001",
         "date_of_birth": "2007-03-15", "gender": "male",
         "admission_date": "2025-08-01",
-        "campus_shift_id": setup["shift_id"], "roll_number": n,
         "program": setup["program_name"], "class_name": setup["class_name"],
         "section": setup["section_name"], "academic_session": setup["session_name"],
         "password": "Student!2025",
@@ -66,7 +65,6 @@ async def test_student_create_freetext_find_or_creates_rows(admin_client, academ
     resp = await admin_client.post("/api/v1/students", json={
         "full_name": "Free Text", "email": "freetext.s@test.edu",
         "admission_date": "2025-08-01",
-        "campus_shift_id": academic_setup["shift_id"], "roll_number": 1,
         "program": "BSCS", "class_name": "Year 1", "section": "Blue",
         "academic_session": "2025-2026", "password": "Student!2025",
     })
@@ -92,17 +90,15 @@ async def test_student_create_freetext_reuses_existing_case_insensitive(admin_cl
     payload = {
         "admission_date": "2025-08-01", "program": "ICS", "class_name": "Part 1",
         "section": "A", "academic_session": "2025-2026", "password": "Student!2025",
-        "campus_shift_id": academic_setup["shift_id"],
     }
     r1 = await admin_client.post("/api/v1/students", json={
-        "full_name": "Reuse One", "email": "reuse.1@test.edu", "roll_number": 1, **payload})
+        "full_name": "Reuse One", "email": "reuse.1@test.edu", **payload})
     assert r1.status_code == 200, r1.text
     # Same names, different case and surrounding whitespace -> must reuse, not duplicate.
     r2 = await admin_client.post("/api/v1/students", json={
-        "full_name": "Reuse Two", "email": "reuse.2@test.edu", "roll_number": 2,
+        "full_name": "Reuse Two", "email": "reuse.2@test.edu",
         "admission_date": "2025-08-01", "program": " ics ", "class_name": " part 1 ",
-        "section": " a ", "academic_session": "2025-2026", "password": "Student!2025",
-        "campus_shift_id": academic_setup["shift_id"]})
+        "section": " a ", "academic_session": "2025-2026", "password": "Student!2025"})
     assert r2.status_code == 200, r2.text
 
     progs = (await admin_client.get("/api/v1/programs")).json()

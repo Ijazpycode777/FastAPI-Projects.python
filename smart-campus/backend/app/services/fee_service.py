@@ -16,6 +16,7 @@ from app.models.fees import FeeInvoice, FeeStructure, Payment
 from app.models.people import Student
 from app.repositories.audit import record_audit
 from app.services.fees_calc import invoice_status, outstanding as out_bal, paid_amount
+from app.utils.helpers import pg_advisory_xact_lock, stable_lock_key
 
 
 async def create_structure(db: AsyncSession, actor, **kw) -> FeeStructure:
@@ -47,6 +48,10 @@ async def generate_invoice(db: AsyncSession, actor, data: dict[str, Any]) -> Fee
 
     issued = data.get("issued_date") or date.today()
     due = issued + timedelta(days=structure.due_after_days)
+    # Serialize invoice-number allocation within this academic session so two
+    # concurrent generate_invoice calls cannot both compute the same COUNT+1
+    # number and collide on the invoice_number UNIQUE constraint.
+    await pg_advisory_xact_lock(db, stable_lock_key("invoice_seq", str(structure.academic_session_id)))
     number = await _next_invoice_number(db, structure.academic_session_id)
 
     invoice = FeeInvoice(
@@ -77,9 +82,19 @@ async def _next_receipt_number(db: AsyncSession) -> str:
 
 
 async def record_payment(db: AsyncSession, actor, data: dict[str, Any]) -> Payment:
-    invoice = await db.get(FeeInvoice, data["invoice_id"])
+    # Lock the invoice row (Postgres FOR UPDATE) so the overpayment check and
+    # status update are atomic w.r.t. concurrent payments against the same
+    # invoice. SQLite ignores FOR UPDATE (single-writer serialization).
+    inv_res = await db.execute(
+        select(FeeInvoice).where(FeeInvoice.id == data["invoice_id"]).with_for_update()
+    )
+    invoice = inv_res.scalar_one_or_none()
     if invoice is None:
         raise NotFoundError("Invoice not found.")
+
+    # Serialize the global receipt-number allocation so concurrent payments
+    # (even across different invoices) cannot collide on receipt_number UNIQUE.
+    await pg_advisory_xact_lock(db, stable_lock_key("receipt_seq"))
 
     payments = await db.execute(select(Payment).where(Payment.invoice_id == invoice.id))
     paid = sum(float(p.amount) for p in payments.scalars().all())

@@ -6,7 +6,6 @@ import { Field, TextInput, Select } from "@/components/forms";
 import { http, ApiError } from "@/lib/api";
 import { useToast } from "@/hooks/useToast";
 import { useAuth } from "@/hooks/useAuth";
-import { useShifts } from "@/features/campus/queries";
 import { formatTime } from "@/lib/utils";
 import type { TimetableEntry, AcademicSession, ClassLevel, Section, Subject, Classroom, Teacher, Page } from "@/types";
 
@@ -64,13 +63,11 @@ function AdminTimetable() {
   const queryClient = useQueryClient();
   const toast = useToast();
   const [sessionId, setSessionId] = useState("");
-  const [shiftId, setShiftId] = useState("");
   const [classId, setClassId] = useState("");
   const [sectionId, setSectionId] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<TimetableEntry | null>(null);
 
-  const { data: shifts } = useShifts();
   const sessions = useQuery({ queryKey: ["sessions"], queryFn: () => http.get<AcademicSession[]>("/sessions") });
   const classes = useQuery({ queryKey: ["classes"], queryFn: () => http.get<ClassLevel[]>("/classes") });
   const sections = useQuery({ queryKey: ["sections"], queryFn: () => http.get<Section[]>("/sections") });
@@ -79,9 +76,9 @@ function AdminTimetable() {
   const teachers = useQuery({ queryKey: ["teachers", "all"], queryFn: () => http.get<Page<Teacher>>("/teachers", { page: 1, page_size: 100 }) });
 
   const entries = useQuery({
-    queryKey: ["timetable", "entries", sessionId, shiftId, classId, sectionId],
+    queryKey: ["timetable", "entries", sessionId, classId, sectionId],
     queryFn: () => http.get<TimetableEntry[]>("/timetable/entries", {
-      academic_session_id: sessionId || undefined, campus_shift_id: shiftId || undefined,
+      academic_session_id: sessionId || undefined,
       class_id: classId || undefined, section_id: sectionId || undefined,
     }),
     enabled: !!sessionId,
@@ -105,17 +102,11 @@ function AdminTimetable() {
       <PageHeader title="Timetable Administration" description="Build the weekly schedule. Conflicts (teacher / classroom / class overlap) are rejected."
         action={<button onClick={openCreate} className="btn-primary" disabled={!sessionId}><Plus size={16} /> Add lecture</button>} />
 
-      <div className="card p-4 mb-4 grid grid-cols-2 sm:grid-cols-4 gap-2">
+      <div className="card p-4 mb-4 grid grid-cols-2 sm:grid-cols-3 gap-2">
         <Field label="Academic session">
           <Select value={sessionId} onChange={(e) => setSessionId(e.target.value)}>
             <option value="">Select session…</option>
             {sessions.data?.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </Select>
-        </Field>
-        <Field label="Campus shift">
-          <Select value={shiftId} onChange={(e) => setShiftId(e.target.value)}>
-            <option value="">All shifts</option>
-            {shifts?.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </Select>
         </Field>
         <Field label="Class">
@@ -167,7 +158,6 @@ function AdminTimetable() {
         <EntryModal
           editing={editing}
           sessionId={sessionId}
-          shifts={shifts ?? []}
           classes={classes.data ?? []}
           sections={sections.data ?? []}
           subjects={subjects.data ?? []}
@@ -181,10 +171,9 @@ function AdminTimetable() {
   );
 }
 
-function EntryModal({ editing, sessionId, shifts, classes, sections, subjects, teachers, classrooms, onClose, onSaved }: {
+function EntryModal({ editing, sessionId, classes, sections, subjects, teachers, classrooms, onClose, onSaved }: {
   editing: TimetableEntry | null;
   sessionId: string;
-  shifts: { id: string; name: string }[];
   classes: ClassLevel[];
   sections: Section[];
   subjects: Subject[];
@@ -203,7 +192,6 @@ function EntryModal({ editing, sessionId, shifts, classes, sections, subjects, t
     class_id: editing?.class_id ?? "",
     section_id: editing?.section_id ?? "",
     classroom_id: editing?.classroom_id ?? "",
-    campus_shift_id: editing?.campus_shift_id ?? "",
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -221,7 +209,6 @@ function EntryModal({ editing, sessionId, shifts, classes, sections, subjects, t
       start_time: form.start_time, end_time: form.end_time,
       subject_id: form.subject_id, teacher_id: form.teacher_id, class_id: form.class_id,
       section_id: form.section_id || null, classroom_id: form.classroom_id || null,
-      campus_shift_id: form.campus_shift_id || null,
     };
     try {
       if (editing) await http.patch(`/timetable/entries/${editing.id}`, payload);
@@ -240,13 +227,12 @@ function EntryModal({ editing, sessionId, shifts, classes, sections, subjects, t
         <button className="btn-primary" disabled={submitting} onClick={submit}>{submitting ? "Saving…" : (editing ? "Save changes" : "Add lecture")}</button>
       </>}>
       <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           <Field label="Day" required>
             <Select value={form.day_of_week} onChange={(e) => setForm({ ...form, day_of_week: e.target.value })}>
               {DAYS.map((d) => <option key={d} value={d}>{DAY_LABEL[d]}</option>)}
             </Select>
           </Field>
-          <Field label="Campus shift"><Select value={form.campus_shift_id} onChange={(e) => setForm({ ...form, campus_shift_id: e.target.value })}><option value="">—</option>{shifts.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</Select></Field>
           <Field label="Start time" required><TextInput type="time" value={form.start_time} onChange={(e) => setForm({ ...form, start_time: e.target.value })} /></Field>
           <Field label="End time" required><TextInput type="time" value={form.end_time} onChange={(e) => setForm({ ...form, end_time: e.target.value })} /></Field>
         </div>

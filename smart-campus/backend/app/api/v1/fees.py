@@ -25,7 +25,7 @@ router = APIRouter(prefix="/fees", tags=["fees"])
 
 
 @router.get("/structures", response_model=list[FeeStructureOut])
-async def list_structures(db: AsyncSession = Depends(get_db)):
+async def list_structures(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     rows = await db.execute(select(FeeStructure).where(FeeStructure.is_active.is_(True)).order_by(FeeStructure.name))
     return [FeeStructureOut.model_validate(r) for r in rows.scalars().all()]
 

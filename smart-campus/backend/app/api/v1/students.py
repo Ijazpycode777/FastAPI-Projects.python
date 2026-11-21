@@ -8,7 +8,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import ForbiddenError, NotFoundError
 from app.database.session import get_db
 from app.models.academic import AcademicSession, ClassLevel, Program, Section
-from app.models.campus import CampusShift
 from app.models.people import Student
 from app.models.user import User
 from app.schemas.common import Page, paginate
@@ -30,7 +29,6 @@ router = APIRouter(prefix="/students", tags=["students"])
 @router.get("", response_model=Page[StudentOut])
 async def list_students(
     q: str | None = Query(None),
-    campus_shift_id: str | None = Query(None),
     program_id: str | None = Query(None),
     class_id: str | None = Query(None),
     section_id: str | None = Query(None),
@@ -50,8 +48,6 @@ async def list_students(
         if q.strip().isdigit():
             conds.append(Student.current_roll_number == int(q.strip()))
         stmt = stmt.where(or_(*conds))
-    if campus_shift_id:
-        stmt = stmt.where(Student.campus_shift_id == campus_shift_id)
     if program_id:
         stmt = stmt.where(Student.current_program_id == program_id)
     if class_id:
@@ -92,8 +88,6 @@ async def get_student(student_id: str, user: User = Depends(get_current_user), d
         out.section_name = s.name
     if student.current_session_id and (sess := await db.get(AcademicSession, student.current_session_id)):
         out.session_name = sess.name
-    if student.campus_shift_id and (sh := await db.get(CampusShift, student.campus_shift_id)):
-        out.campus_shift_name = sh.name
     return out
 
 

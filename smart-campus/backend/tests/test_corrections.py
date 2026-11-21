@@ -269,23 +269,24 @@ async def test_spa_missing_asset_returns_404(spa_client):
 
 
 # ---------------------------------------------------------------------------
-# #4 — bootstrap password policy (warnings, never fatal) — unit
+# #4 — bootstrap password policy (fail-closed in production) — unit
 # ---------------------------------------------------------------------------
-def test_bootstrap_warns_on_default_password_in_production(monkeypatch, caplog):
+def test_bootstrap_rejects_default_password_in_production(monkeypatch):
+    """A production deploy with the built-in default admin password must abort,
+    not warn-and-continue (remotely exploitable known credential)."""
     monkeypatch.setattr(settings, "app_env", "production")
     monkeypatch.setattr(settings, "seed_admin_password", "ChangeMe!2025")
     from app.seed import _check_admin_password_policy
-    with caplog.at_level(logging.WARNING, logger="smartcampus.seed"):
-        _check_admin_password_policy("ChangeMe!2025")  # must NOT raise
-    assert any("built-in default" in r.message for r in caplog.records)
+    with pytest.raises(RuntimeError, match="built-in default"):
+        _check_admin_password_policy("ChangeMe!2025")
 
 
-def test_bootstrap_warns_on_weak_password_in_production(monkeypatch, caplog):
+def test_bootstrap_rejects_weak_password_in_production(monkeypatch):
+    """A weak admin password must abort startup in production."""
     monkeypatch.setattr(settings, "app_env", "production")
     from app.seed import _check_admin_password_policy
-    with caplog.at_level(logging.WARNING, logger="smartcampus.seed"):
-        _check_admin_password_policy("short1")  # must NOT raise
-    assert any("weak" in r.message for r in caplog.records)
+    with pytest.raises(RuntimeError, match="weak"):
+        _check_admin_password_policy("short1")
 
 
 def test_bootstrap_silent_on_default_password_in_dev(monkeypatch, caplog):

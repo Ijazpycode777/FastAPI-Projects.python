@@ -22,7 +22,6 @@ router = APIRouter(prefix="/teachers", tags=["teachers"])
 async def list_teachers(
     q: str | None = Query(None),
     department: str | None = Query(None),
-    campus_shift_id: str | None = Query(None),
     subject_id: str | None = Query(None),
     status: str | None = Query(None),
     sort: str = Query("created_at", pattern="^(full_name|created_at)$"),
@@ -38,8 +37,6 @@ async def list_teachers(
         stmt = stmt.where(or_(Teacher.full_name.ilike(like), Teacher.email.ilike(like), Teacher.employee_id.ilike(like)))
     if department:
         stmt = stmt.where(Teacher.department == department)
-    if campus_shift_id:
-        stmt = stmt.where(Teacher.campus_shift_id == campus_shift_id)
     if status:
         stmt = stmt.where(Teacher.employment_status == status)
     if subject_id:

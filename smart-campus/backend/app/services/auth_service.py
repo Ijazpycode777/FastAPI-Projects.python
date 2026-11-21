@@ -176,8 +176,7 @@ async def issue_csrf(response: Response, request: Request, user: Optional[User])
     return token
 
 
-async def change_password(db: AsyncSession, user: User, current: str, new: str) -> None:
-    from app.security.password import hash_password
+async def change_password(db: AsyncSession, request: Request, user: User, current: str, new: str) -> None:
     if not verify_password(current, user.password_hash):
         raise AppException("Current password is incorrect.", status_code=400, code="BAD_REQUEST")
     ok, reason = is_strong_password(new)
@@ -185,6 +184,20 @@ async def change_password(db: AsyncSession, user: User, current: str, new: str) 
         raise AppException(reason or "Weak password.", status_code=422, code="VALIDATION_ERROR")
     user.password_hash = hash_password(new)
     user.must_reset_password = False
+    # Revoke all OTHER active sessions for this user (keep the calling session so
+    # the user stays logged in). Any stolen session cookie elsewhere is killed.
+    current_session_id = getattr(request.state, "session_id", None)
+    rev_stmt = update(SessionModel).where(
+        SessionModel.user_id == user.id, SessionModel.revoked.is_(False),
+    )
+    if current_session_id:
+        rev_stmt = rev_stmt.where(SessionModel.id != current_session_id)
+    await db.execute(rev_stmt.values(revoked=True))
+    ip, ua = _client_meta(request)
+    await record_audit(
+        db, actor_id=user.id, actor_role=user.role, action="auth.password_change",
+        resource_type="user", resource_id=user.id, ip_address=ip, user_agent=ua,
+    )
     await db.commit()
 
 
@@ -192,15 +205,23 @@ async def admin_reset_password(db: AsyncSession, target: User, request: Request)
     """Admin resets a user's password to a generated temporary value.
 
     The admin never sees the existing password. The temporary password is
-    returned once and the user is flagged must_reset_password.
+    returned once and the user is flagged must_reset_password. ALL of the
+    target's active sessions are revoked so they must authenticate with the
+    temporary password.
     """
-    from app.security.password import hash_password
     from app.utils.helpers import generate_password
     temp = generate_password(12)
     target.password_hash = hash_password(temp)
     target.must_reset_password = True
     target.failed_login_attempts = 0
     target.locked_until = None
+    # Revoke every active session for the target — a pre-reset (or stolen)
+    # session must not survive a credential reset.
+    await db.execute(
+        update(SessionModel)
+        .where(SessionModel.user_id == target.id, SessionModel.revoked.is_(False))
+        .values(revoked=True)
+    )
     ip, ua = _client_meta(request)
     await record_audit(
         db,
@@ -209,6 +230,8 @@ async def admin_reset_password(db: AsyncSession, target: User, request: Request)
         action="auth.password_reset",
         resource_type="user",
         resource_id=target.id,
+        ip_address=ip,
+        user_agent=ua,
     )
     await db.commit()
     return temp

@@ -22,7 +22,6 @@ from app.database.session import AsyncSessionLocal, engine
 from app.models.academic import AcademicSession, ClassLevel, Classroom, Program, Section, Subject
 from app.models.assignments import TeacherAssignment
 from app.models.attendance import AttendanceRecord, TeacherAttendance
-from app.models.campus import CampusShift
 from app.models.examinations import Examination, GradingBoundary, GradingPolicy, StudentMark
 from app.models.fees import FeeInvoice, FeeStructure, Payment
 from app.models.materials import StudyMaterial
@@ -142,28 +141,26 @@ def _minimal_pdf() -> bytes:
 
 
 def _check_admin_password_policy(password: str) -> None:
-    """Validate the seeded admin password; warn (never crash) when weak.
+    """Validate the seeded admin password; FAIL CLOSED in production.
 
-    The env-var admin is a permanent, always-accessible account, so a weak or
-    default password never prevents startup — it only emits a loud warning so an
-    operator notices and rotates it. In non-production the built-in default is
-    permitted silently.
+    A deployment with the built-in default (or a weak) admin password is a
+    remotely exploitable credential, so production startup aborts rather than
+    coming up with a known password. In non-production the built-in default is
+    permitted so local dev keeps working out of the box.
     """
     if not settings.is_production:
         return
     from app.security.password import is_strong_password
 
-    if password == "ChangeMe!2025":
-        log.warning(
-            "SEED_ADMIN_PASSWORD is the built-in default; set a strong, unique "
-            "administrator password."
+    if not password or password == "ChangeMe!2025":
+        raise RuntimeError(
+            "SEED_ADMIN_PASSWORD is unset or the built-in default in production; "
+            "set a strong, unique administrator password before deploying."
         )
-        return
     ok, reason = is_strong_password(password)
     if not ok:
-        log.warning(
-            "SEED_ADMIN_PASSWORD is weak (%s); set a strong, unique password.",
-            reason,
+        raise RuntimeError(
+            f"SEED_ADMIN_PASSWORD is weak ({reason}); set a strong, unique password."
         )
 
 
@@ -224,22 +221,25 @@ async def bootstrap_admin() -> bool:
                     "unused address.", email, existing.role,
                 )
             else:
-                # Permanent admin: re-sync the password and account flags to the
-                # configured env values on every startup so SEED_ADMIN_PASSWORD
-                # ALWAYS works (even if it was changed in-app or the account got
-                # locked by repeated failed attempts). must_reset_password is
-                # forced off so the account is usable immediately on first login.
-                existing.password_hash = pw_hash
+                # Permanent admin exists. The admin's password is NOT re-synced on
+                # every restart — that would revert in-app rotations back to the
+                # env value. Only ensure the account stays usable: force role/is_active,
+                # and clear any accidental lockout so the admin can always recover
+                # after a restart. The password is re-synced ONLY when an operator
+                # explicitly sets SEED_ADMIN_PASSWORD_RESET=1 (e.g. to rotate the
+                # env credential); must_reset_password follows the same flag.
+                if settings.seed_admin_password_reset:
+                    existing.password_hash = pw_hash
+                    existing.must_reset_password = False
+                    log.info(
+                        "Bootstrap: administrator %s password re-synced "
+                        "(SEED_ADMIN_PASSWORD_RESET=1).", email,
+                    )
                 existing.role = "admin"
                 existing.is_active = True
-                existing.must_reset_password = False
                 existing.locked_until = None
                 existing.failed_login_attempts = 0
                 await db.commit()
-                log.info(
-                    "Bootstrap: administrator %s re-synced to SEED_ADMIN_PASSWORD "
-                    "(password, flags and lockout reset).", email,
-                )
     # Verify a usable ADMIN (role == 'admin' AND active) exists for the email.
     async with AsyncSessionLocal() as db:
         admin = (await db.execute(select(User).where(User.email == email))).scalar_one_or_none()
@@ -300,16 +300,6 @@ async def seed_demo_data() -> None:
             r102 = await _get_or_create(db, Classroom, [Classroom.room_number == "102"],
                                         room_number="102", building="Main", capacity=40)
 
-            # Campus shifts (Morning / Evening)
-            morning = await _get_or_create(
-                db, CampusShift, [CampusShift.code == "MORNING"],
-                name="Morning", code="MORNING", start_time=time(8, 0), end_time=time(14, 0), is_active=True,
-            )
-            evening = await _get_or_create(
-                db, CampusShift, [CampusShift.code == "EVENING"],
-                name="Evening", code="EVENING", start_time=time(14, 0), end_time=time(20, 0), is_active=True,
-            )
-
             # Teacher
             teacher_user = await _get_or_create(
                 db, User, [User.email == "teacher.sarah@smartcampus.edu"],
@@ -323,7 +313,7 @@ async def seed_demo_data() -> None:
                 full_name="Sarah Khan", email="teacher.sarah@smartcampus.edu",
                 phone="+923000000001", department="Computer Science",
                 designation="Senior Lecturer", joining_date=date(2022, 9, 1),
-                campus_shift_id=morning.id, employment_status="active",
+                employment_status="active",
             )
 
             # Assign teacher to ICS Part 1 A for CS and MATH
@@ -366,14 +356,14 @@ async def seed_demo_data() -> None:
                     account_status="active",
                     current_program_id=ics.id, current_class_id=ics_p1.id,
                     current_section_id=ics_p1_a.id, current_session_id=session.id,
-                    current_roll_number=i, campus_shift_id=morning.id,
+                    current_roll_number=i,
                 )
                 await _get_or_create(
                     db, StudentEnrolment,
                     [StudentEnrolment.student_id == student.id, StudentEnrolment.academic_session_id == session.id],
                     student_id=student.id, academic_session_id=session.id,
                     program_id=ics.id, class_id=ics_p1.id, section_id=ics_p1_a.id,
-                    roll_number=i, campus_shift_id=morning.id, is_active=True,
+                    roll_number=i, is_active=True,
                 )
                 # Board records
                 await _get_or_create(
@@ -396,7 +386,7 @@ async def seed_demo_data() -> None:
                          TimetableEntry.start_time == start,
                          TimetableEntry.subject_id == subj.id,
                          TimetableEntry.class_id == ics_p1.id],
-                        academic_session_id=session.id, campus_shift_id=morning.id, day_of_week=day,
+                        academic_session_id=session.id, day_of_week=day,
                         start_time=start, end_time=end, subject_id=subj.id,
                         teacher_id=teacher.id, class_id=ics_p1.id, section_id=ics_p1_a.id,
                         classroom_id=room.id, is_cancelled=False,

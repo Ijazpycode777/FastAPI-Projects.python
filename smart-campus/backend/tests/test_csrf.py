@@ -10,15 +10,15 @@ double-submit cookie flow against the actual CSRF middleware:
   * no session (CSRF passes, auth fails) vs. wrong role (CSRF passes, authz fails)
   * the Secure attribute is scheme-aware (not set over HTTP, set behind an HTTPS proxy)
   * the exempt-path matcher is precise (no over-exemption)
-  * Create New Shift succeeds only with a valid token + admin session
+  * Create program succeeds only with a valid token + admin session
 """
 from __future__ import annotations
 
 from app.middleware.csrf import is_exempt
 
 
-def _shift_payload(code: str = "MORN") -> dict:
-    return {"name": "Morning", "code": code, "start_time": None, "end_time": None, "is_active": True}
+def _csrf_payload(code: str = "PROG") -> dict:
+    return {"code": code, "name": code}
 
 
 async def _login(client, email: str, password: str):
@@ -33,33 +33,33 @@ def _csrf_token(client) -> str | None:
 
 # ---------------- token presence / validity ----------------
 
-async def test_create_shift_without_csrf_token_is_rejected(real_csrf, client, admin_user):
+async def test_create_program_without_csrf_token_is_rejected(real_csrf, client, admin_user):
     """No X-CSRF-Token header → 403 CSRF_FAILED (the reported symptom)."""
     await _login(client, "admin@test.edu", "AdminPass!2025")
-    resp = await client.post("/api/v1/campus/shifts", json=_shift_payload())
+    resp = await client.post("/api/v1/programs", json=_csrf_payload())
     assert resp.status_code == 403
     assert resp.json()["error"]["code"] == "CSRF_FAILED"
     assert "CSRF" in resp.json()["error"]["message"]
 
 
-async def test_create_shift_with_invalid_csrf_token_is_rejected(real_csrf, client, admin_user):
+async def test_create_program_with_invalid_csrf_token_is_rejected(real_csrf, client, admin_user):
     """Header present but wrong value → 403 CSRF_FAILED."""
     await _login(client, "admin@test.edu", "AdminPass!2025")
     resp = await client.post(
-        "/api/v1/campus/shifts", json=_shift_payload(),
+        "/api/v1/programs", json=_csrf_payload(),
         headers={"X-CSRF-Token": "bogus-token-does-not-match-cookie"},
     )
     assert resp.status_code == 403
     assert resp.json()["error"]["code"] == "CSRF_FAILED"
 
 
-async def test_create_shift_with_valid_csrf_token_succeeds(real_csrf, client, admin_user):
-    """Matching cookie + header + admin session → 200, shift created."""
+async def test_create_program_with_valid_csrf_token_succeeds(real_csrf, client, admin_user):
+    """Matching cookie + header + admin session → 200, program created."""
     await _login(client, "admin@test.edu", "AdminPass!2025")
     token = _csrf_token(client)
     assert token, "login must set the smartcampus_csrf cookie"
     resp = await client.post(
-        "/api/v1/campus/shifts", json=_shift_payload("VALID"),
+        "/api/v1/programs", json=_csrf_payload("VALID"),
         headers={"X-CSRF-Token": token},
     )
     assert resp.status_code == 200, resp.text
@@ -81,7 +81,7 @@ async def test_rotated_csrf_token_rejects_stale_and_accepts_fresh(real_csrf, cli
 
     # Stale header vs fresh cookie → mismatch → 403
     resp = await client.post(
-        "/api/v1/campus/shifts", json=_shift_payload("STALE"),
+        "/api/v1/programs", json=_csrf_payload("STALE"),
         headers={"X-CSRF-Token": stale},
     )
     assert resp.status_code == 403
@@ -89,7 +89,7 @@ async def test_rotated_csrf_token_rejects_stale_and_accepts_fresh(real_csrf, cli
 
     # Fresh header vs fresh cookie → match → 200
     resp = await client.post(
-        "/api/v1/campus/shifts", json=_shift_payload("FRESH"),
+        "/api/v1/programs", json=_csrf_payload("FRESH"),
         headers={"X-CSRF-Token": fresh},
     )
     assert resp.status_code == 200, resp.text
@@ -109,14 +109,14 @@ async def test_valid_csrf_without_session_is_unauthenticated(real_csrf, client, 
     assert _csrf_token(client) == token  # cookie stored, no session cookie set
 
     resp = await client.post(
-        "/api/v1/campus/shifts", json=_shift_payload("NOSESS"),
+        "/api/v1/programs", json=_csrf_payload("NOSESS"),
         headers={"X-CSRF-Token": token},
     )
     assert resp.status_code == 401
     assert resp.json()["error"]["code"] == "UNAUTHENTICATED"
 
 
-async def test_student_with_valid_csrf_cannot_create_shift(real_csrf, client, db):
+async def test_student_with_valid_csrf_cannot_create_program(real_csrf, client, db):
     """CSRF passes but the role check rejects a student → 403 FORBIDDEN (not CSRF_FAILED)."""
     from app.models.user import User
     from app.security.password import hash_password
@@ -131,7 +131,7 @@ async def test_student_with_valid_csrf_cannot_create_shift(real_csrf, client, db
     assert token
 
     resp = await client.post(
-        "/api/v1/campus/shifts", json=_shift_payload("ROLE"),
+        "/api/v1/programs", json=_csrf_payload("ROLE"),
         headers={"X-CSRF-Token": token},
     )
     assert resp.status_code == 403
@@ -201,5 +201,5 @@ def test_is_exempt_matches_precisely():
     assert is_exempt("/api/v1/auth/login-anything") is False
     assert is_exempt("/api/v1/auth/csrf-forged") is False
     # Real protected endpoints are not exempt.
-    assert is_exempt("/api/v1/campus/shifts") is False
+    assert is_exempt("/api/v1/programs") is False
     assert is_exempt("/api/v1/students") is False

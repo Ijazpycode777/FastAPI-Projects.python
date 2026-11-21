@@ -52,10 +52,11 @@ async def me(user: User = Depends(get_current_user)):
 @router.post("/password", response_model=dict)
 async def change_password(
     payload: PasswordChangeIn,
+    request: Request,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    await auth_service.change_password(db, user, payload.current_password, payload.new_password)
+    await auth_service.change_password(db, request, user, payload.current_password, payload.new_password)
     return {"message": "Password changed."}
 
 

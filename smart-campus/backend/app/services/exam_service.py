@@ -41,6 +41,29 @@ async def _load_boundaries(db: AsyncSession, policy_id: str | None) -> list[Boun
     ]
 
 
+async def assert_teacher_can_manage_exam(db: AsyncSession, actor, exam: Examination) -> None:
+    """Authorize a teacher to manage an exam (enter/publish/finalize/view marks).
+
+    Admins bypass. Teachers must be currently assigned to the exam's subject +
+    class (+ section). The exam's creator is NOT specially exempted: if a
+    teacher is unassigned from the subject/class they lose access, which is the
+    intended permission boundary (no lingering rights after unassignment).
+    """
+    if actor.role == "admin":
+        return
+    if actor.role != "teacher":
+        raise ForbiddenError("Only staff can manage examinations.")
+    teacher_id = str(actor.teacher_profile.id) if getattr(actor, "teacher_profile", None) else None
+    if not teacher_id:
+        raise ForbiddenError("Teacher profile not found.")
+    auth = await teacher_authorized_for(
+        db, teacher_id, str(exam.subject_id), str(exam.class_id),
+        str(exam.section_id) if exam.section_id else None,
+    )
+    if not auth:
+        raise ForbiddenError("You are not authorized to manage this examination.")
+
+
 async def create_exam(db: AsyncSession, actor, data: dict[str, Any]) -> Examination:
     policy_id = data.get("grading_policy_id")
     if policy_id:
@@ -77,14 +100,7 @@ async def enter_marks(db: AsyncSession, actor, teacher_id: str, data: dict[str, 
         raise NotFoundError("Examination not found.")
     if exam.status == "finalized":
         raise ForbiddenError("Examination is finalized; marks cannot be changed.")
-    if actor.role == "teacher":
-        if str(exam.created_by) != str(actor.id):
-            auth = await teacher_authorized_for(
-                db, teacher_id, str(exam.subject_id), str(exam.class_id),
-                str(exam.section_id) if exam.section_id else None,
-            )
-            if not auth:
-                raise ForbiddenError("You are not authorized to enter marks for this exam.")
+    await assert_teacher_can_manage_exam(db, actor, exam)
 
     boundaries = await _load_boundaries(db, exam.grading_policy_id)
 
@@ -129,6 +145,7 @@ async def enter_marks(db: AsyncSession, actor, teacher_id: str, data: dict[str, 
 
 
 async def publish(db: AsyncSession, actor, exam: Examination) -> Examination:
+    await assert_teacher_can_manage_exam(db, actor, exam)
     if exam.status == "finalized":
         raise ConflictError("Examination is already finalized.")
     exam.status = "published"
@@ -141,6 +158,7 @@ async def publish(db: AsyncSession, actor, exam: Examination) -> Examination:
 
 async def finalize(db: AsyncSession, actor, exam: Examination) -> Examination:
     """Freeze results. Captures the grading policy version used."""
+    await assert_teacher_can_manage_exam(db, actor, exam)
     if exam.grading_policy_id is None:
         raise ValidationError("Examination has no grading policy; cannot finalize.")
     now_iso = datetime.now(timezone.utc).isoformat()

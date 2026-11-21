@@ -38,7 +38,18 @@ export function AttendanceMarkingPage() {
     onSuccess: () => {
       toast.success("Attendance saved");
       setStatuses({});
-      qc.invalidateQueries({ queryKey: ["attendance"] });
+      // Invalidate the real query keys used across the attendance features.
+      // Verified keys (read in AttendanceHistoryPage.tsx + StudentDetailPage.tsx):
+      //  - ["attendance-records", role, studentId]   → prefix ["attendance-records"]
+      //  - ["attendance-summary", studentId]          → prefix ["attendance-summary"]
+      //  - ["student", id, "breakdown"]               → prefix ["student"]
+      // TanStack partial matching invalidates every query whose key starts with
+      // the given array, so these refresh every variant at once. ["student"] is
+      // the narrowest prefix that catches the breakdown query (the audit's bare
+      // ["breakdown"] would match nothing because no key starts with "breakdown").
+      qc.invalidateQueries({ queryKey: ["attendance-records"] });
+      qc.invalidateQueries({ queryKey: ["attendance-summary"] });
+      qc.invalidateQueries({ queryKey: ["student"] });
     },
     onError: (e: unknown) => toast.error("Could not save attendance", (e as Error).message),
   });

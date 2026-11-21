@@ -8,7 +8,6 @@ import { Select } from "@/components/forms";
 import { useDebounce } from "@/hooks/useDebounce";
 import { http } from "@/lib/api";
 import { useStudents } from "./queries";
-import { useShifts } from "@/features/campus/queries";
 import type { Student, AcademicSession, ClassLevel, Section } from "@/types";
 
 const STATUS_OPTS = ["active", "inactive", "graduated", "left", "suspended"];
@@ -16,7 +15,6 @@ const STATUS_OPTS = ["active", "inactive", "graduated", "left", "suspended"];
 export function StudentListPage() {
   const navigate = useNavigate();
   const [q, setQ] = useState("");
-  const [shiftId, setShiftId] = useState("");
   const [sessionId, setSessionId] = useState("");
   const [classId, setClassId] = useState("");
   const [sectionId, setSectionId] = useState("");
@@ -26,7 +24,6 @@ export function StudentListPage() {
   const [page, setPage] = useState(1);
   const debounced = useDebounce(q, 300);
 
-  const { data: shifts } = useShifts();
   const sessions = useQuery({ queryKey: ["sessions"], queryFn: () => http.get<AcademicSession[]>("/sessions") });
   const classes = useQuery({ queryKey: ["classes"], queryFn: () => http.get<ClassLevel[]>("/classes") });
   const sections = useQuery({ queryKey: ["sections"], queryFn: () => http.get<Section[]>("/sections") });
@@ -36,17 +33,19 @@ export function StudentListPage() {
     (id && list?.find((x) => x.id === id)?.name) ?? "—";
 
   const params = {
-    q: debounced || undefined, campus_shift_id: shiftId || undefined, session_id: sessionId || undefined,
+    q: debounced || undefined, session_id: sessionId || undefined,
     class_id: classId || undefined, section_id: sectionId || undefined, status: status || undefined,
     sort: sortKey, order: sortDir, page, page_size: 20,
   };
   const { data, isLoading, isError, refetch } = useStudents(params);
 
-  const hasFilters = !!(shiftId || sessionId || classId || sectionId || status || q);
-  const clearFilters = () => { setQ(""); setShiftId(""); setSessionId(""); setClassId(""); setSectionId(""); setStatus(""); setPage(1); };
+  const hasFilters = !!(sessionId || classId || sectionId || status || q);
+  const clearFilters = () => { setQ(""); setSessionId(""); setClassId(""); setSectionId(""); setStatus(""); setPage(1); };
 
   const onSort = (key: string) => {
-    const backendKey = key === "roll" ? "roll" : key === "full_name" ? "full_name" : "created_at";
+    // The Roll column's data key is "current_roll_number" (see columns below);
+    // map it to the backend sort value "roll".
+    const backendKey = key === "current_roll_number" ? "roll" : key === "full_name" ? "full_name" : "created_at";
     if (sortKey === backendKey) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     else { setSortKey(backendKey); setSortDir("asc"); }
   };
@@ -59,7 +58,6 @@ export function StudentListPage() {
         <p className="text-[11px] text-slate-muted truncate">{s.admission_number}</p>
       </div>
     ) },
-    { key: "campus_shift_id", header: "Shift", render: (s) => <span className="text-slate-muted">{nameOf(shifts, s.campus_shift_id)}</span> },
     { key: "current_session_id", header: "Session", render: (s) => <span className="text-slate-muted">{nameOf(sessions.data, s.current_session_id)}</span> },
     { key: "current_class_id", header: "Class", render: (s) => <span className="text-slate-muted">{nameOf(classes.data, s.current_class_id)}</span> },
     { key: "current_section_id", header: "Section", render: (s) => <span className="text-slate-muted">{nameOf(sections.data, s.current_section_id)}</span> },
@@ -70,7 +68,7 @@ export function StudentListPage() {
     <div>
       <PageHeader
         title="Student Logs"
-        description="Search and inspect student records by roll number, name, shift, session, class and section."
+        description="Search and inspect student records by roll number, name, session, class and section."
         action={<button onClick={() => navigate("/students/new")} className="btn-primary"><Plus size={16} /> Add Student</button>}
       />
 
@@ -79,11 +77,7 @@ export function StudentListPage() {
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-muted" />
           <input className="input pl-9" placeholder="Search by roll number, name, admission no. or email…" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} />
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
-          <Select value={shiftId} onChange={(e) => { setShiftId(e.target.value); setPage(1); }}>
-            <option value="">All shifts</option>
-            {shifts?.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </Select>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
           <Select value={sessionId} onChange={(e) => { setSessionId(e.target.value); setPage(1); }}>
             <option value="">All sessions</option>
             {sessions.data?.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}

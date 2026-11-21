@@ -4,7 +4,7 @@ import type { Page, Student } from "@/types";
 
 export function useStudents(params: {
   q?: string; program_id?: string; class_id?: string; section_id?: string;
-  session_id?: string; campus_shift_id?: string; status?: string;
+  session_id?: string; status?: string;
   sort?: string; order?: "asc" | "desc"; page?: number; page_size?: number;
 }) {
   return useQuery({

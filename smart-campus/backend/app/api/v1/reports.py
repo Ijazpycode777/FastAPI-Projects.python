@@ -6,7 +6,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import ForbiddenError, NotFoundError
 from app.database.session import get_db
 from app.models.examinations import Examination, StudentMark
 from app.models.fees import Payment
@@ -15,7 +15,8 @@ from app.models.user import User
 from app.schemas.common import Page, paginate
 from app.schemas.people import StudentOut
 from app.security.dependencies import require_admin, require_staff
-from app.services import report_service, fee_service, attendance_service
+from app.services import exam_service, report_service, fee_service, attendance_service
+from app.services.academic_service import teacher_assigned_to_class
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
@@ -37,6 +38,10 @@ async def students_xlsx(program_id: str | None = Query(None), admin: User = Depe
 @router.get("/attendance/class/{class_id}.xlsx")
 async def attendance_xlsx(class_id: str, section_id: str | None = Query(None),
                           user: User = Depends(require_staff()), db: AsyncSession = Depends(get_db)):
+    if user.role == "teacher":
+        teacher_id = str(user.teacher_profile.id) if getattr(user, "teacher_profile", None) else None
+        if not teacher_id or not await teacher_assigned_to_class(db, teacher_id, class_id):
+            raise ForbiddenError("You can only export attendance for classes you teach.")
     rows = await attendance_service.class_summary(db, class_id, section_id, None)
     buf = report_service.attendance_xlsx(rows)
     return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -76,6 +81,8 @@ async def result_sheet(exam_id: str, user: User = Depends(require_staff()), db: 
     exam = await db.get(Examination, exam_id)
     if exam is None:
         raise NotFoundError("Examination not found.")
+    # Teachers may only export result sheets for exams they are authorized to manage.
+    await exam_service.assert_teacher_can_manage_exam(db, user, exam)
     marks = (await db.execute(select(StudentMark).where(StudentMark.examination_id == exam_id))).scalars().all()
     data = []
     for m in marks:

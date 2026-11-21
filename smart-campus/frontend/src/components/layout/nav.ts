@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, Users, GraduationCap, CalendarCheck, FileText, ClipboardList,
-  Wallet, CalendarDays, BookOpen, Megaphone, BarChart3, Sunrise, Hash,
+  Wallet, CalendarDays, BookOpen, Megaphone, BarChart3,
 } from "lucide-react";
 import type { Role } from "@/lib/constants";
 
@@ -19,8 +19,6 @@ export const NAV: NavItem[] = [
   { to: "/student", label: "Dashboard", icon: LayoutDashboard, roles: ["student"], group: "Main" },
   { to: "/students", label: "Student Logs", icon: Users, roles: ["admin"], group: "People" },
   { to: "/teachers", label: "Teacher Logs", icon: GraduationCap, roles: ["admin"], group: "People" },
-  { to: "/campus/shifts", label: "Campus Shifts", icon: Sunrise, roles: ["admin"], group: "People" },
-  { to: "/campus/roll-schemes", label: "Roll Schemes", icon: Hash, roles: ["admin"], group: "People" },
   { to: "/attendance/mark", label: "Mark Attendance", icon: CalendarCheck, roles: ["teacher"], group: "Academics" },
   { to: "/attendance", label: "Attendance", icon: CalendarCheck, roles: ["admin", "teacher", "student"], group: "Academics" },
   { to: "/examinations", label: "Examinations", icon: FileText, roles: ["admin", "teacher"], group: "Academics" },

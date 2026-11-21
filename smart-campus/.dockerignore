@@ -1,0 +1,21 @@
+# Keep dev/local secrets + build artifacts out of the Docker build context.
+# (.gitignore does NOT bind the Docker context — .dockerignore does.)
+**/.env
+**/.env.*
+!**/.env.example
+
+node_modules
+frontend/node_modules
+frontend/dist
+frontend/.vite
+**/__pycache__
+**/.pytest_cache
+*.pyc
+.git
+.venv
+storage
+**/*.tsbuildinfo
+htmlcov
+.coverage
+**/vite.config.js
+**/vite.config.d.ts

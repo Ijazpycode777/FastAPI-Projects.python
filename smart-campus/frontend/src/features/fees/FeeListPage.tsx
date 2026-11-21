@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { Wallet, Search } from "lucide-react";
-import { PageHeader, Badge, EmptyState, ErrorState } from "@/components/common";
+import { PageHeader, Badge, Pagination, EmptyState, ErrorState } from "@/components/common";
 import { DataTable, type Column } from "@/components/tables/DataTable";
 import { http } from "@/lib/api";
 import { useDebounce } from "@/hooks/useDebounce";
@@ -12,10 +12,11 @@ import { formatCurrency, formatDate } from "@/lib/utils";
 export function FeeListPage() {
   const navigate = useNavigate();
   const [q, setQ] = useState("");
+  const [page, setPage] = useState(1);
   const debounced = useDebounce(q, 300);
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ["invoices", debounced],
-    queryFn: () => http.get<Page<FeeInvoice>>("/fees/invoices", { status: debounced || undefined, page: 1, page_size: 50 }),
+    queryKey: ["invoices", debounced, page],
+    queryFn: () => http.get<Page<FeeInvoice>>("/fees/invoices", { status: debounced || undefined, page, page_size: 50 }),
   });
 
   const columns: Column<FeeInvoice>[] = [
@@ -33,7 +34,7 @@ export function FeeListPage() {
       <div className="card p-4 mb-4">
         <div className="relative max-w-xs">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-muted" />
-          <select className="input pl-9" value={q} onChange={(e) => setQ(e.target.value)}>
+          <select className="input pl-9" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }}>
             <option value="">All statuses</option>
             <option value="unpaid">Unpaid</option>
             <option value="partial">Partial</option>
@@ -47,6 +48,8 @@ export function FeeListPage() {
           onRowClick={(i) => navigate(`/fees/${i.id}`)}
           emptyState={<EmptyState icon={Wallet} title="No invoices found" />} />
       )}
+
+      <Pagination page={page} totalPages={data?.pagination?.total_pages ?? 1} onPage={setPage} />
     </div>
   );
 }

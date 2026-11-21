@@ -1,6 +1,7 @@
 /** @type {import('tailwindcss').Config} */
-// Premium ERP palette — dark navy sidebar, indigo→violet primary, bright SaaS
-// accents, cool-gray canvas, hairline borders, soft diffuse elevation.
+// Premium ERP palette — navy→deep-purple primary identity, lavender canvas,
+// hairline borders, soft diffuse elevation. Aligned to the Smart Campus design
+// spec: navy #21145B / deep purple #301078 / accent #6041C8 / lavender #F0EDFC.
 // Token keys are kept stable so existing utilities (bg-navy, text-indigo, …)
 // propagate the new colours everywhere without touching call sites.
 export default {
@@ -8,46 +9,46 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Dark navy — sidebar surface + attendance "present" brand.
-        navy: { DEFAULT: "#171E30", soft: "#1E2640", deep: "#121726" },
-        // Primary indigo→violet — buttons, active nav, links, focus ring.
-        indigo: { DEFAULT: "#4F46E5", soft: "#6D5DF6", dark: "#4338CA" },
-        // Violet accent (gradient end, premium highlights).
-        violet: { DEFAULT: "#7C3AED", soft: "#8B5CF6" },
+        // Dark navy — sidebar surface, primary brand, attendance "present" brand.
+        navy: { DEFAULT: "#21145B", soft: "#2A1A6B", deep: "#1A0F47" },
+        // Primary accent — buttons, active nav, links, focus ring.
+        indigo: { DEFAULT: "#6041C8", soft: "#7C5BD8", dark: "#301078" },
+        // Deep purple — gradient end, premium highlights.
+        violet: { DEFAULT: "#301078", soft: "#4A2A9A" },
         // Success
-        teal: { DEFAULT: "#10B981", soft: "#34D399" },
+        teal: { DEFAULT: "#18A879", soft: "#2BC494" },
         // Warning
-        amber: { DEFAULT: "#F59E0B", soft: "#FBBF24" },
+        amber: { DEFAULT: "#E8A23A", soft: "#F0B85A" },
         // Error / danger
-        rose: { DEFAULT: "#EF4444", soft: "#F87171" },
+        rose: { DEFAULT: "#E05262", soft: "#E9707E" },
         // Info
-        blue: { DEFAULT: "#3B82F6", soft: "#60A5FA" },
-        // Neutrals — cool gray canvas, hairline borders.
+        blue: { DEFAULT: "#3999D6", soft: "#5DB0DF" },
+        // Neutrals — cool lavender-tinted canvas, hairline borders.
         slate: {
-          bg: "#F4F6FB", card: "#FFFFFF", border: "#E9EDF5",
-          hairline: "#EEF1F7", muted: "#6B7280", faint: "#9CA3AF",
+          bg: "#F6F7FC", card: "#FFFFFF", border: "#E8E8F0",
+          hairline: "#EEF0F7", muted: "#73758A", faint: "#9CA0B5",
         },
         // Main text — near-black navy.
-        ink: { DEFAULT: "#1E2233" },
-        // Light indigo surface (tints, focus wells).
-        lightblue: { DEFAULT: "#EEF2FF" },
+        ink: { DEFAULT: "#202033" },
+        // Light lavender surface (tints, focus wells, soft highlights).
+        lightblue: { DEFAULT: "#F0EDFC" },
         // Neutral grey — leave / inactive (attendance "leave" segment).
-        neutral: { DEFAULT: "#9CA3AF" },
+        neutral: { DEFAULT: "#9CA0B5" },
       },
       fontFamily: {
         sans: ["Inter", "ui-sans-serif", "system-ui", "Segoe UI", "Roboto", "Helvetica", "Arial"],
       },
       boxShadow: {
         // Soft, diffuse elevation — the premium SaaS card lift.
-        card: "0 1px 2px rgba(23,30,60,0.04), 0 8px 24px rgba(23,30,60,0.06)",
-        pop: "0 12px 32px -8px rgba(23,30,60,0.18), 0 8px 16px -10px rgba(23,30,60,0.10)",
-        glow: "0 8px 24px -6px rgba(79,70,229,0.45)",
+        card: "0 1px 2px rgba(33,20,91,0.04), 0 8px 24px rgba(33,20,91,0.06)",
+        pop: "0 12px 32px -8px rgba(33,20,91,0.18), 0 8px 16px -10px rgba(33,20,91,0.10)",
+        glow: "0 8px 24px -6px rgba(96,65,200,0.45)",
       },
       borderRadius: { xl: "1rem", "2xl": "1.25rem", "3xl": "1.5rem" },
       backgroundImage: {
-        "brand-gradient": "linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)",
-        "brand-gradient-soft": "linear-gradient(135deg, #6D5DF6 0%, #8B5CF6 100%)",
-        "navy-gradient": "linear-gradient(180deg, #171E30 0%, #121726 100%)",
+        "brand-gradient": "linear-gradient(135deg, #21145B 0%, #301078 50%, #6041C8 100%)",
+        "brand-gradient-soft": "linear-gradient(135deg, #6041C8 0%, #301078 100%)",
+        "navy-gradient": "linear-gradient(180deg, #21145B 0%, #1A0F47 100%)",
       },
       keyframes: {
         fadeIn: { from: { opacity: "0" }, to: { opacity: "1" } },

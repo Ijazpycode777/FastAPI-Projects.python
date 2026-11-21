@@ -20,6 +20,7 @@ from app.models.user import User
 from app.schemas.academic import (
     AcademicSessionIn,
     AcademicSessionOut,
+    AssignmentIn,
     ClassroomIn,
     ClassroomOut,
     ClassLevelIn,
@@ -133,10 +134,10 @@ async def list_assignments(teacher_id: str | None = Query(None), db: AsyncSessio
 
 
 @router.post("/assignments", tags=["assignments"], dependencies=[Depends(require_admin())])
-async def create_assignment(payload: dict, admin: User = Depends(require_admin()), db: AsyncSession = Depends(get_db)):
+async def create_assignment(payload: AssignmentIn, admin: User = Depends(require_admin()), db: AsyncSession = Depends(get_db)):
     assignment = await academic_service.assign_teacher(
-        db, admin, payload["teacher_id"], payload["subject_id"], payload["class_id"],
-        payload.get("section_id"), payload["academic_session_id"],
+        db, admin, payload.teacher_id, payload.subject_id, payload.class_id,
+        payload.section_id, payload.academic_session_id,
     )
     return {"id": str(assignment.id), "teacher_id": str(assignment.teacher_id),
             "subject_id": str(assignment.subject_id), "class_id": str(assignment.class_id),

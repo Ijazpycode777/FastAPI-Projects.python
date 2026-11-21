@@ -49,7 +49,6 @@ async def list_entries(
     class_id: str | None = Query(None),
     section_id: str | None = Query(None),
     academic_session_id: str | None = Query(None),
-    campus_shift_id: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
 ):
     stmt = (
@@ -68,8 +67,6 @@ async def list_entries(
         stmt = stmt.where((TimetableEntry.section_id == section_id) | (TimetableEntry.section_id.is_(None)))
     if academic_session_id:
         stmt = stmt.where(TimetableEntry.academic_session_id == academic_session_id)
-    if campus_shift_id:
-        stmt = stmt.where(TimetableEntry.campus_shift_id == campus_shift_id)
     rows = (await db.execute(stmt)).scalars().all()
     out = []
     for e in rows:

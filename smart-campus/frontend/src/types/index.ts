@@ -37,12 +37,10 @@ export interface Student {
   current_program_id?: string | null; current_class_id?: string | null;
   current_section_id?: string | null; current_session_id?: string | null;
   current_roll_number?: number | null;
-  campus_shift_id?: string | null;
   // Resolved placement names (returned by the detail endpoint), used to
   // prefill the free-text placement fields on the edit form.
   program_name?: string | null; class_name?: string | null;
   section_name?: string | null; session_name?: string | null;
-  campus_shift_name?: string | null;
 }
 
 export interface BoardRecord {
@@ -59,7 +57,6 @@ export interface Teacher {
   id: string; user_id: string; employee_id: string; full_name: string; email: string;
   phone?: string | null; department?: string | null; designation: string;
   joining_date: string; employment_status: string;
-  campus_shift_id?: string | null;
 }
 
 export interface AcademicSession { id: string; name: string; start_date: string; end_date: string; is_active: boolean; }
@@ -69,14 +66,10 @@ export interface Section { id: string; class_level_id: string; name: string; cap
 export interface Subject { id: string; program_id: string; code: string; name: string; theory_marks: number; practical_marks: number; }
 export interface Classroom { id: string; room_number: string; building?: string | null; capacity: number; is_active: boolean; }
 
-export interface CampusShift { id: string; name: string; code: string; start_time?: string | null; end_time?: string | null; is_active: boolean; }
-export interface RollNumberScheme { id: string; campus_shift_id: string; class_id: string; section_id?: string | null; prefix?: string | null; min_roll: number; max_roll: number; padding: number; }
-
 export interface TimetableEntry {
   id: string; day_of_week: string; start_time: string; end_time: string;
   subject_id: string; teacher_id: string; class_id: string; section_id?: string | null;
   classroom_id?: string | null; is_cancelled: boolean;
-  campus_shift_id?: string | null;
   subject_name?: string; teacher_name?: string; classroom_number?: string;
 }
 

@@ -34,14 +34,23 @@ export function StudentDetailPage() {
   if (isError || !student) return <ErrorState message="Student not found." onRetry={() => refetch()} />;
 
   const toggleActive = async () => {
-    const action = student.account_status === "active" ? "deactivate" : "activate";
-    await http.post(`/students/${student.id}/${action}`);
-    toast.success(`Student ${action}d`);
-    refetch();
+    try {
+      const action = student.account_status === "active" ? "deactivate" : "activate";
+      await http.post(`/students/${student.id}/${action}`);
+      toast.success(`Student ${action}d`);
+      queryClient.invalidateQueries({ queryKey: ["students"] });
+      refetch();
+    } catch (e) {
+      toast.error((e as Error)?.message ?? "Action failed");
+    }
   };
   const resetPassword = async () => {
-    const res = await http.post<{ temporary_password: string }>(`/auth/reset/${student.user_id}`);
-    toast.success("Password reset", `Temporary password: ${res.temporary_password}`);
+    try {
+      const res = await http.post<{ temporary_password: string }>(`/auth/reset/${student.user_id}`);
+      toast.success("Password reset", `Temporary password: ${res.temporary_password}`);
+    } catch (e) {
+      toast.error((e as Error)?.message ?? "Action failed");
+    }
   };
   const onLeaveSaved = () => {
     queryClient.invalidateQueries({ queryKey: ["leave", "student", student.id] });

@@ -1,7 +1,7 @@
 import { Users, GraduationCap, Wallet, TrendingUp, Layers, Megaphone } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { PageHeader, StatCard, Card, CardHeader, ErrorState, Skeleton, HeroBanner } from "@/components/common";
-import { TrendAreaChart, CategoryBarChart, DistributionDonut, HorizontalBarChart } from "@/components/charts";
+import { TrendAreaChart, CategoryBarChart, DistributionDonut, HorizontalBarChart, ProgressRing } from "@/components/charts";
 import { useAdminDashboard } from "./queries";
 import { useAuth } from "@/hooks/useAuth";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
@@ -16,6 +16,10 @@ export function AdminDashboard() {
 
   const stat = (i: number) => Number(data.stats[i]?.value ?? 0);
   const firstName = profile?.user.full_name.split(" ")[0] ?? "Admin";
+  // Fee collection rate — drives the circular progress ring (Part 5.3D).
+  const collected = stat(4);
+  const outstanding = stat(5);
+  const feePct = collected + outstanding > 0 ? (collected / (collected + outstanding)) * 100 : 0;
 
   return (
     <div>
@@ -42,13 +46,34 @@ export function AdminDashboard() {
               : <p className="text-sm text-slate-muted py-10 text-center">No enrolled students yet.</p>}
           </div>
         </Card>
-        <Card className="lg:col-span-2 card-hover">
+        <Card className="card-hover">
           <CardHeader title="Fee collection" subtitle="Collected amount by month · click to view"
             action={<Link to="/fees" className="text-xs text-indigo font-medium">View</Link>} />
           <div className="p-4 cursor-pointer" onClick={() => navigate("/fees")} role="button" aria-label="Open fee management">
             {data.fee_collection_trend.length
               ? <TrendAreaChart data={data.fee_collection_trend} />
               : <p className="text-sm text-slate-muted py-10 text-center">No payments recorded yet.</p>}
+          </div>
+        </Card>
+        <Card className="card-hover">
+          <CardHeader title="Fee status" subtitle="Collection rate · click to view"
+            action={<Link to="/fees" className="text-xs text-indigo font-medium">View</Link>} />
+          <div className="p-5 flex flex-col items-center justify-center cursor-pointer" onClick={() => navigate("/fees")} role="button" aria-label="Open fee management">
+            {collected + outstanding > 0 ? (
+              <>
+                <ProgressRing value={feePct} size={170} label="Collected" />
+                <div className="mt-4 grid grid-cols-2 gap-3 w-full text-center">
+                  <div>
+                    <p className="text-[11px] uppercase tracking-wider text-slate-muted">Collected</p>
+                    <p className="text-sm font-bold text-teal">{formatCurrency(collected)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] uppercase tracking-wider text-slate-muted">Outstanding</p>
+                    <p className="text-sm font-bold text-rose">{formatCurrency(outstanding)}</p>
+                  </div>
+                </div>
+              </>
+            ) : <p className="text-sm text-slate-muted py-10 text-center">No invoices issued yet.</p>}
           </div>
         </Card>
       </div>
