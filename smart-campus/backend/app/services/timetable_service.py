@@ -7,7 +7,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError
+from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError, ValidationError
 from app.models.assignments import TeacherAssignment
 from app.models.people import Teacher
 from app.models.timetable import TimetableEntry, TimetablePeriod
@@ -92,6 +92,55 @@ async def cancel_entry(db: AsyncSession, actor, entry: TimetableEntry) -> Timeta
     await db.commit()
     await db.refresh(entry)
     return entry
+
+
+async def update_entry(db: AsyncSession, actor, entry: TimetableEntry, data: dict[str, Any]) -> TimetableEntry:
+    """Update a scheduled lecture and re-run conflict validation (excluding self)."""
+    for k in ("day_of_week", "start_time", "end_time", "subject_id", "teacher_id",
+              "class_id", "section_id", "classroom_id", "period_name", "campus_shift_id"):
+        if data.get(k) is not None:
+            setattr(entry, k, data[k])
+    if entry.end_time <= entry.start_time:
+        raise ValidationError("end_time must be after start_time")
+    candidates = await db.execute(
+        select(TimetableEntry).where(
+            TimetableEntry.academic_session_id == entry.academic_session_id,
+            TimetableEntry.day_of_week == entry.day_of_week,
+            TimetableEntry.is_cancelled.is_(False),
+            TimetableEntry.id != entry.id,
+        )
+    )
+    existing = [
+        EntryRef(
+            id=str(e.id), day_of_week=e.day_of_week,
+            start_time=e.start_time, end_time=e.end_time,
+            teacher_id=str(e.teacher_id), classroom_id=str(e.classroom_id) if e.classroom_id else None,
+            class_id=str(e.class_id), section_id=str(e.section_id) if e.section_id else None,
+        )
+        for e in candidates.scalars().all()
+    ]
+    new_ref = EntryRef(
+        id=str(entry.id), day_of_week=entry.day_of_week,
+        start_time=entry.start_time, end_time=entry.end_time,
+        teacher_id=str(entry.teacher_id),
+        classroom_id=str(entry.classroom_id) if entry.classroom_id else None,
+        class_id=str(entry.class_id), section_id=str(entry.section_id) if entry.section_id else None,
+    )
+    conflict = find_conflict(new_ref, existing)
+    if conflict:
+        raise ConflictError(conflict_reason(conflict, new_ref))
+    await record_audit(db, actor_id=actor.id, actor_role=actor.role,
+                       action="timetable_entry.update", resource_type="timetable_entry", resource_id=entry.id)
+    await db.commit()
+    await db.refresh(entry)
+    return entry
+
+
+async def delete_entry(db: AsyncSession, actor, entry: TimetableEntry) -> None:
+    await record_audit(db, actor_id=actor.id, actor_role=actor.role,
+                       action="timetable_entry.delete", resource_type="timetable_entry", resource_id=entry.id)
+    await db.delete(entry)
+    await db.commit()
 
 
 async def weekly_for_teacher(db: AsyncSession, teacher_id: str) -> list[TimetableEntry]:

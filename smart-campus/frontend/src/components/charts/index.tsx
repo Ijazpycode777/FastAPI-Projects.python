@@ -3,23 +3,23 @@ import {
   BarChart, Bar, PieChart, Pie, Cell, AreaChart, Area,
 } from "recharts";
 
-// Spec palette (Part 11.2) — deterministic, never randomised.
-export const CHART_COLORS = ["#2457A6", "#23865B", "#D99A27", "#D64545", "#163A70", "#9AA3AF"];
+// Premium ERP palette — indigo→violet primary with vibrant SaaS accents.
+export const CHART_COLORS = ["#4F46E5", "#10B981", "#F59E0B", "#EF4444", "#7C3AED", "#3B82F6"];
 
-// Attendance donut segment colours — exact, per Part 8.2.
+// Attendance donut segment colours — present=green, absent=red, leave=grey.
 export const ATTENDANCE_COLORS = {
-  present: "#163A70", // dark blue
-  absent: "#D64545",  // red
-  leave: "#9AA3AF",   // grey
+  present: "#10B981", // green
+  absent: "#EF4444",  // red
+  leave: "#9CA3AF",   // grey
 } as const;
 
-const axisStyle = { fontSize: 11, fill: "#667085" };
-const gridStroke = "#E4E7EC";
-const tooltipStyle = { borderRadius: 10, border: `1px solid ${gridStroke}`, fontSize: 12 };
+const axisStyle = { fontSize: 11, fill: "#6B7280" };
+const gridStroke = "#EEF1F7";
+const tooltipStyle = { borderRadius: 12, border: `1px solid #E9EDF5`, fontSize: 12, boxShadow: "0 8px 24px rgba(23,30,60,0.10)" };
 
 interface SeriesProps { data: { label: string; value: number }[]; color?: string; height?: number; }
 
-export function TrendLineChart({ data, color = "#2457A6", height = 240 }: SeriesProps) {
+export function TrendLineChart({ data, color = "#4F46E5", height = 240 }: SeriesProps) {
   return (
     <ResponsiveContainer width="100%" height={height}>
       <LineChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: -16 }}>
@@ -51,7 +51,7 @@ export function CategoryBarChart({ data, height = 240 }: SeriesProps) {
 
 // Horizontal bars — for long class/section labels (admin class comparison,
 // teacher class distribution).
-export function HorizontalBarChart({ data, height = 240, color = "#2457A6" }: SeriesProps & { color?: string }) {
+export function HorizontalBarChart({ data, height = 240, color = "#4F46E5" }: SeriesProps & { color?: string }) {
   return (
     <ResponsiveContainer width="100%" height={height}>
       <BarChart layout="vertical" data={data} margin={{ top: 4, right: 16, bottom: 4, left: 24 }}>
@@ -80,7 +80,7 @@ export function DistributionDonut({ data, height = 240 }: { data: { label: strin
   );
 }
 
-export function TrendAreaChart({ data, color = "#23865B", height = 240 }: SeriesProps) {
+export function TrendAreaChart({ data, color = "#10B981", height = 240 }: SeriesProps) {
   return (
     <ResponsiveContainer width="100%" height={height}>
       <AreaChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: -16 }}>

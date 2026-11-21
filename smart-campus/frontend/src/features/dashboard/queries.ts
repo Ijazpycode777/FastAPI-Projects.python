@@ -12,6 +12,7 @@ export interface AdminDashboardData {
   outstanding_balance: number;
   recent_notices: { id: string; title: string; published_at: string }[];
   recent_activity: { id?: string; action?: string; resource_type?: string }[];
+  top_performers: { student_id: string; name: string; category: string; score: number; metric: string }[];
 }
 export interface TeacherDashboardData {
   stats: StatCardType[];

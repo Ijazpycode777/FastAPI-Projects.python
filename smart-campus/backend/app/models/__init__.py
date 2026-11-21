@@ -13,6 +13,7 @@ from app.models.attendance import (
     TeacherAttendance,
 )
 from app.models.audit import AuditLog
+from app.models.campus import CampusShift, RollNumberScheme
 from app.models.communications import Notice, Notification
 from app.models.examinations import (
     Examination,
@@ -46,6 +47,8 @@ __all__ = [
     "Section",
     "Subject",
     "Classroom",
+    "CampusShift",
+    "RollNumberScheme",
     "Teacher",
     "Guardian",
     "Student",

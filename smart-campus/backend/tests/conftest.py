@@ -131,6 +131,10 @@ async def academic_setup(admin_client):
     assert subj.status_code == 200, subj.text
     room = await admin_client.post("/api/v1/classrooms", json={"room_number": "101", "capacity": 40})
     assert room.status_code == 200, room.text
+    shift = await admin_client.post("/api/v1/campus/shifts", json={
+        "name": "Morning", "code": "MORNING", "start_time": "08:00", "end_time": "14:00", "is_active": True,
+    })
+    assert shift.status_code == 200, shift.text
     return {
         "session_id": sess.json()["id"],
         "program_id": prog.json()["id"],
@@ -138,6 +142,7 @@ async def academic_setup(admin_client):
         "section_id": sec.json()["id"],
         "subject_id": subj.json()["id"],
         "classroom_id": room.json()["id"],
+        "shift_id": shift.json()["id"],
         # Free-text placement names (match what was created above so the
         # student create endpoint's find-or-create resolves to the same rows).
         "program_name": "ICS",

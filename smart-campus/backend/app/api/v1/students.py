@@ -2,12 +2,13 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ForbiddenError, NotFoundError
 from app.database.session import get_db
 from app.models.academic import AcademicSession, ClassLevel, Program, Section
+from app.models.campus import CampusShift
 from app.models.people import Student
 from app.models.user import User
 from app.schemas.common import Page, paginate
@@ -29,9 +30,14 @@ router = APIRouter(prefix="/students", tags=["students"])
 @router.get("", response_model=Page[StudentOut])
 async def list_students(
     q: str | None = Query(None),
+    campus_shift_id: str | None = Query(None),
     program_id: str | None = Query(None),
     class_id: str | None = Query(None),
+    section_id: str | None = Query(None),
+    session_id: str | None = Query(None),
     status: str | None = Query(None),
+    sort: str = Query("created_at", pattern="^(full_name|roll|created_at)$"),
+    order: str = Query("desc", pattern="^(asc|desc)$"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=200),
     admin: User = Depends(require_admin()),
@@ -40,15 +46,26 @@ async def list_students(
     stmt = select(Student)
     if q:
         like = f"%{q.lower()}%"
-        stmt = stmt.where(or_(Student.full_name.ilike(like), Student.admission_number.ilike(like), Student.email.ilike(like)))
+        conds = [Student.full_name.ilike(like), Student.admission_number.ilike(like), Student.email.ilike(like)]
+        if q.strip().isdigit():
+            conds.append(Student.current_roll_number == int(q.strip()))
+        stmt = stmt.where(or_(*conds))
+    if campus_shift_id:
+        stmt = stmt.where(Student.campus_shift_id == campus_shift_id)
     if program_id:
         stmt = stmt.where(Student.current_program_id == program_id)
     if class_id:
         stmt = stmt.where(Student.current_class_id == class_id)
+    if section_id:
+        stmt = stmt.where(Student.current_section_id == section_id)
+    if session_id:
+        stmt = stmt.where(Student.current_session_id == session_id)
     if status:
         stmt = stmt.where(Student.account_status == status)
-    total = (await db.execute(select(__import__("sqlalchemy").func.count()).select_from(stmt.subquery()))).scalar_one()
-    rows = (await db.execute(stmt.order_by(Student.created_at.desc()).offset((page - 1) * page_size).limit(page_size))).scalars().all()
+    total = (await db.execute(select(func.count()).select_from(stmt.subquery()))).scalar_one()
+    sort_col = {"full_name": Student.full_name, "roll": Student.current_roll_number, "created_at": Student.created_at}[sort]
+    stmt = stmt.order_by(sort_col.desc() if order == "desc" else sort_col.asc())
+    rows = (await db.execute(stmt.offset((page - 1) * page_size).limit(page_size))).scalars().all()
     return paginate([StudentOut.model_validate(r) for r in rows], page, page_size, int(total or 0))
 
 
@@ -75,6 +92,8 @@ async def get_student(student_id: str, user: User = Depends(get_current_user), d
         out.section_name = s.name
     if student.current_session_id and (sess := await db.get(AcademicSession, student.current_session_id)):
         out.session_name = sess.name
+    if student.campus_shift_id and (sh := await db.get(CampusShift, student.campus_shift_id)):
+        out.campus_shift_name = sh.name
     return out
 
 

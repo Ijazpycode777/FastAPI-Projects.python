@@ -1,1 +1,1 @@
-export { Card, CardHeader, Badge, PageHeader, Skeleton, EmptyState, ErrorState, Pagination, Modal, StatCard } from "@/components/common/index.tsx";
+export { Card, CardHeader, Badge, PageHeader, Skeleton, EmptyState, ErrorState, Pagination, Modal, StatCard, HeroBanner } from "@/components/common/index.tsx";

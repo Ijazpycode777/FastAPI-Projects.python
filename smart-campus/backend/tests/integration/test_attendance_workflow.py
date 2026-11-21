@@ -22,9 +22,10 @@ async def _setup_teacher(admin_client, setup, email="teacher.t1@test.edu"):
     return teacher
 
 
-async def _create_student(admin_client, setup, email):
+async def _create_student(admin_client, setup, email, n=1):
     resp = await admin_client.post("/api/v1/students", json={
         "full_name": "Stu", "email": email, "admission_date": "2025-08-01",
+        "campus_shift_id": setup["shift_id"], "roll_number": n,
         "program": setup["program_name"], "class_name": setup["class_name"],
         "section": setup["section_name"], "academic_session": setup["session_name"],
         "password": "Student!2025",

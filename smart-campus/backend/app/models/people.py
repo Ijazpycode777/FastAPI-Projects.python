@@ -27,6 +27,10 @@ class Teacher(UUIDPK, TimestampMixin, Base):
     designation: Mapped[str] = mapped_column(String(80), nullable=False, default="Lecturer")
     joining_date: Mapped[date] = mapped_column(Date, nullable=False)
     employment_status: Mapped[str] = mapped_column(String(24), nullable=False, default="active")
+    # Campus shift this teacher primarily belongs to (nullable for legacy rows).
+    campus_shift_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("campus_shifts.id", ondelete="SET NULL"), nullable=True
+    )
 
     user = relationship("User", back_populates="teacher_profile")
     assignments = relationship("TeacherAssignment", back_populates="teacher", cascade="all, delete-orphan")
@@ -51,6 +55,10 @@ class Student(UUIDPK, TimestampMixin, Base):
     __tablename__ = "students"
     __table_args__ = (
         UniqueConstraint("admission_number", name="uq_students_admission_number"),
+        # Roll numbers are unique WITHIN a campus shift. The same roll number
+        # may be reused in a different shift. NULL shift/roll rows (legacy) are
+        # treated as distinct by PostgreSQL/SQLite, so this is safe to add.
+        UniqueConstraint("campus_shift_id", "current_roll_number", name="uq_students_shift_roll"),
         CheckConstraint("gender IN ('male','female','other')", name="students_gender_check"),
         CheckConstraint(
             "account_status IN ('active','inactive','graduated','left','suspended')",
@@ -58,6 +66,7 @@ class Student(UUIDPK, TimestampMixin, Base):
         ),
         Index("ix_students_user", "user_id", unique=True),
         Index("ix_students_admission", "admission_number"),
+        Index("ix_students_shift_roll", "campus_shift_id", "current_roll_number"),
     )
 
     user_id: Mapped[str] = mapped_column(
@@ -88,9 +97,15 @@ class Student(UUIDPK, TimestampMixin, Base):
         String(36), ForeignKey("academic_sessions.id", ondelete="SET NULL"), nullable=True
     )
     current_roll_number: Mapped[int | None] = mapped_column(nullable=True)
+    # Campus shift — every student belongs to a shift (going forward required
+    # on create; legacy rows may be NULL until an administrator assigns them).
+    campus_shift_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("campus_shifts.id", ondelete="SET NULL"), nullable=True
+    )
 
     user = relationship("User", back_populates="student_profile")
     guardian = relationship("Guardian", back_populates="students", lazy="selectin")
+    campus_shift = relationship("CampusShift", back_populates="students")
     enrolments = relationship("StudentEnrolment", back_populates="student", cascade="all, delete-orphan")
     board_records = relationship("BoardExaminationRecord", back_populates="student", cascade="all, delete-orphan")
     attendance = relationship("AttendanceRecord", back_populates="student")
@@ -105,8 +120,12 @@ class StudentEnrolment(UUIDPK, TimestampMixin, Base):
     """
     __tablename__ = "student_enrolments"
     __table_args__ = (
-        UniqueConstraint("academic_session_id", "section_id", "roll_number", name="uq_enrolment_roll"),
+        # Roll-number uniqueness is enforced on the student
+        # (campus_shift_id + current_roll_number) so the same roll can be reused
+        # across different shifts. The old (session, section, roll) constraint
+        # would have blocked that cross-shift reuse, so it is intentionally gone.
         Index("ix_enrolment_student_session", "student_id", "academic_session_id"),
+        Index("ix_enrolment_section_roll", "section_id", "roll_number"),
     )
 
     student_id: Mapped[str] = mapped_column(
@@ -125,6 +144,10 @@ class StudentEnrolment(UUIDPK, TimestampMixin, Base):
         String(36), ForeignKey("sections.id", ondelete="RESTRICT"), nullable=False
     )
     roll_number: Mapped[int] = mapped_column(nullable=False)
+    # Snapshot of the student's campus shift at enrolment time.
+    campus_shift_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("campus_shifts.id", ondelete="SET NULL"), nullable=True
+    )
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
 
     student = relationship("Student", back_populates="enrolments")

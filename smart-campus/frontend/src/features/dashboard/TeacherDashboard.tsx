@@ -1,8 +1,9 @@
 import { BookOpen, Clock, CalendarDays, FileText, Users } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
-import { PageHeader, StatCard, Card, CardHeader, ErrorState, Skeleton, EmptyState } from "@/components/common";
+import { StatCard, Card, CardHeader, ErrorState, Skeleton, EmptyState, HeroBanner } from "@/components/common";
 import { HorizontalBarChart, CategoryBarChart, CHART_COLORS } from "@/components/charts";
 import { useTeacherDashboard } from "./queries";
+import { useAuth } from "@/hooks/useAuth";
 import { formatTime } from "@/lib/utils";
 
 const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
@@ -16,6 +17,7 @@ function subjectColor(name: string): string {
 
 export function TeacherDashboard() {
   const { data, isLoading, isError, refetch } = useTeacherDashboard();
+  const { profile } = useAuth();
   const navigate = useNavigate();
   if (isError) return <ErrorState message="Failed to load your dashboard." onRetry={() => refetch()} />;
   if (isLoading || !data) return (
@@ -27,13 +29,16 @@ export function TeacherDashboard() {
   );
 
   const stat = (i: number) => Number(data.stats[i]?.value ?? 0);
+  const firstName = profile?.user.full_name.split(" ")[0] ?? "Teacher";
   const byDay = DAYS
     .map((d) => ({ day: d, lectures: data.weekly_timetable.filter((e) => e.day === d) }))
     .filter((g) => g.lectures.length);
 
   return (
     <div>
-      <PageHeader title="Teacher Dashboard" description="Your classes, weekly timetable and academic performance." />
+      <HeroBanner emoji="📖" title="Your Teaching Overview" subtitle={`Welcome back, ${firstName}`}>
+        <span className="opacity-90">{stat(0)} assigned classes · {stat(1)} lectures today · {stat(3)} students across classes</span>
+      </HeroBanner>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard label="Assigned Classes" value={stat(0)} tone="primary" icon={BookOpen} />
         <StatCard label="Today's Lectures" value={stat(1)} tone="primary" icon={Clock} />

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, Link } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -8,10 +8,13 @@ import { Field, TextInput, Select } from "@/components/forms";
 import { http, ApiError } from "@/lib/api";
 import { useToast } from "@/hooks/useToast";
 import { useStudent } from "./queries";
+import { useShifts } from "@/features/campus/queries";
 
 // Placement is free text (like a username): the admin types the program,
 // class/part, section and academic session names. The backend find-or-creates
 // the underlying rows, so there are no fixed dropdown values to pre-populate.
+// Campus shift is a managed entity (admin creates Morning/Evening) so it is a
+// dropdown. Roll number is manually assigned and unique within the shift.
 const schema = z.object({
   full_name: z.string().min(1, "Required"),
   email: z.string().email("Valid email required"),
@@ -19,6 +22,8 @@ const schema = z.object({
   date_of_birth: z.string().optional(),
   gender: z.enum(["male", "female", "other"]).or(z.literal("")),
   admission_date: z.string().min(1, "Required"),
+  campus_shift_id: z.string().min(1, "Select a campus shift"),
+  roll_number: z.coerce.number().int().min(1, "Roll must be a positive number"),
   program: z.string().min(1, "Required"),
   class_name: z.string().min(1, "Required"),
   section: z.string().min(1, "Required"),
@@ -38,10 +43,11 @@ export function StudentFormPage() {
   const [submitting, setSubmitting] = useState(false);
 
   const { data: existing, isLoading } = useStudent(id);
+  const { data: shifts } = useShifts();
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { gender: "", admission_date: new Date().toISOString().slice(0, 10) },
+    defaultValues: { gender: "", admission_date: new Date().toISOString().slice(0, 10), campus_shift_id: "", roll_number: 1 },
   });
 
   // Prefill from the existing student's resolved placement names when editing.
@@ -54,6 +60,8 @@ export function StudentFormPage() {
         date_of_birth: existing.date_of_birth ?? "",
         gender: (existing.gender ?? "") as FormValues["gender"],
         admission_date: existing.admission_date,
+        campus_shift_id: existing.campus_shift_id ?? "",
+        roll_number: existing.current_roll_number ?? 1,
         program: existing.program_name ?? "",
         class_name: existing.class_name ?? "",
         section: existing.section_name ?? "",
@@ -71,6 +79,7 @@ export function StudentFormPage() {
         full_name: v.full_name, email: v.email, phone: v.phone || null,
         date_of_birth: v.date_of_birth || null, gender: v.gender || null,
         admission_date: v.admission_date,
+        campus_shift_id: v.campus_shift_id, roll_number: v.roll_number,
         program: v.program, class_name: v.class_name,
         section: v.section, academic_session: v.academic_session,
       };
@@ -110,6 +119,27 @@ export function StudentFormPage() {
             <Field label="Date of birth"><TextInput type="date" {...register("date_of_birth")} /></Field>
             <Field label="Gender"><Select {...register("gender")}><option value="">—</option><option value="male">Male</option><option value="female">Female</option><option value="other">Other</option></Select></Field>
             <Field label="Admission date" required error={errors.admission_date?.message}><TextInput type="date" {...register("admission_date")} /></Field>
+          </div>
+        </Card>
+
+        <Card className="mb-4">
+          <CardHeader title="Campus & roll number" subtitle="Roll numbers are unique within the selected shift." />
+          <div className="p-5 grid sm:grid-cols-2 gap-4">
+            <Field label="Campus shift" required error={errors.campus_shift_id?.message}
+              hint={shifts && shifts.length === 0 ? "No shifts yet — create one first." : undefined}>
+              <Select {...register("campus_shift_id")}>
+                <option value="">Select shift…</option>
+                {shifts?.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </Select>
+            </Field>
+            <Field label="Roll number" required error={errors.roll_number?.message} hint="Manually assigned (e.g. 1, 2, 3…)">
+              <TextInput type="number" min={1} {...register("roll_number", { valueAsNumber: true })} />
+            </Field>
+            {shifts && shifts.length === 0 && (
+              <p className="sm:col-span-2 text-sm text-slate-muted">
+                <Link to="/campus/shifts" className="text-indigo font-medium">Create a campus shift</Link> before adding students.
+              </p>
+            )}
           </div>
         </Card>
 

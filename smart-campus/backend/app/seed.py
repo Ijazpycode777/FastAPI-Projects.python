@@ -22,6 +22,7 @@ from app.database.session import AsyncSessionLocal, engine
 from app.models.academic import AcademicSession, ClassLevel, Classroom, Program, Section, Subject
 from app.models.assignments import TeacherAssignment
 from app.models.attendance import AttendanceRecord, TeacherAttendance
+from app.models.campus import CampusShift
 from app.models.examinations import Examination, GradingBoundary, GradingPolicy, StudentMark
 from app.models.fees import FeeInvoice, FeeStructure, Payment
 from app.models.materials import StudyMaterial
@@ -299,6 +300,16 @@ async def seed_demo_data() -> None:
             r102 = await _get_or_create(db, Classroom, [Classroom.room_number == "102"],
                                         room_number="102", building="Main", capacity=40)
 
+            # Campus shifts (Morning / Evening)
+            morning = await _get_or_create(
+                db, CampusShift, [CampusShift.code == "MORNING"],
+                name="Morning", code="MORNING", start_time=time(8, 0), end_time=time(14, 0), is_active=True,
+            )
+            evening = await _get_or_create(
+                db, CampusShift, [CampusShift.code == "EVENING"],
+                name="Evening", code="EVENING", start_time=time(14, 0), end_time=time(20, 0), is_active=True,
+            )
+
             # Teacher
             teacher_user = await _get_or_create(
                 db, User, [User.email == "teacher.sarah@smartcampus.edu"],
@@ -312,7 +323,7 @@ async def seed_demo_data() -> None:
                 full_name="Sarah Khan", email="teacher.sarah@smartcampus.edu",
                 phone="+923000000001", department="Computer Science",
                 designation="Senior Lecturer", joining_date=date(2022, 9, 1),
-                employment_status="active",
+                campus_shift_id=morning.id, employment_status="active",
             )
 
             # Assign teacher to ICS Part 1 A for CS and MATH
@@ -355,14 +366,14 @@ async def seed_demo_data() -> None:
                     account_status="active",
                     current_program_id=ics.id, current_class_id=ics_p1.id,
                     current_section_id=ics_p1_a.id, current_session_id=session.id,
-                    current_roll_number=i,
+                    current_roll_number=i, campus_shift_id=morning.id,
                 )
                 await _get_or_create(
                     db, StudentEnrolment,
                     [StudentEnrolment.student_id == student.id, StudentEnrolment.academic_session_id == session.id],
                     student_id=student.id, academic_session_id=session.id,
                     program_id=ics.id, class_id=ics_p1.id, section_id=ics_p1_a.id,
-                    roll_number=i, is_active=True,
+                    roll_number=i, campus_shift_id=morning.id, is_active=True,
                 )
                 # Board records
                 await _get_or_create(
@@ -385,7 +396,7 @@ async def seed_demo_data() -> None:
                          TimetableEntry.start_time == start,
                          TimetableEntry.subject_id == subj.id,
                          TimetableEntry.class_id == ics_p1.id],
-                        academic_session_id=session.id, day_of_week=day,
+                        academic_session_id=session.id, campus_shift_id=morning.id, day_of_week=day,
                         start_time=start, end_time=end, subject_id=subj.id,
                         teacher_id=teacher.id, class_id=ics_p1.id, section_id=ics_p1_a.id,
                         classroom_id=room.id, is_cancelled=False,

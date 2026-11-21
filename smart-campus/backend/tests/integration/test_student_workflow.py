@@ -7,6 +7,7 @@ async def _create_student(admin_client, setup, email="student.s1@test.edu", n=1)
         "full_name": "Student One", "email": email, "phone": "+923000000001",
         "date_of_birth": "2007-03-15", "gender": "male",
         "admission_date": "2025-08-01",
+        "campus_shift_id": setup["shift_id"], "roll_number": n,
         "program": setup["program_name"], "class_name": setup["class_name"],
         "section": setup["section_name"], "academic_session": setup["session_name"],
         "password": "Student!2025",
@@ -40,8 +41,8 @@ async def test_student_logs_in_and_accesses_dashboard(admin_client, client, acad
 
 
 async def test_student_cannot_view_another_student(admin_client, client, academic_setup):
-    s1 = await _create_student(admin_client, academic_setup, email="student.a@test.edu")
-    s2 = await _create_student(admin_client, academic_setup, email="student.b@test.edu")
+    s1 = await _create_student(admin_client, academic_setup, email="student.a@test.edu", n=1)
+    s2 = await _create_student(admin_client, academic_setup, email="student.b@test.edu", n=2)
     await login_as(client, "student.a@test.edu", "Student!2025")
     # s1 tries to read s2's board records -> forbidden
     resp = await client.get(f"/api/v1/students/{s2['id']}/board-records")
@@ -60,11 +61,12 @@ async def test_student_cannot_access_admin_reports(admin_client, client, academi
     assert resp.status_code == 403
 
 
-async def test_student_create_freetext_find_or_creates_rows(admin_client):
+async def test_student_create_freetext_find_or_creates_rows(admin_client, academic_setup):
     """Free-text placement with brand-new names creates the academic rows."""
     resp = await admin_client.post("/api/v1/students", json={
         "full_name": "Free Text", "email": "freetext.s@test.edu",
         "admission_date": "2025-08-01",
+        "campus_shift_id": academic_setup["shift_id"], "roll_number": 1,
         "program": "BSCS", "class_name": "Year 1", "section": "Blue",
         "academic_session": "2025-2026", "password": "Student!2025",
     })
@@ -85,20 +87,22 @@ async def test_student_create_freetext_find_or_creates_rows(admin_client):
     assert detail["session_name"] == "2025-2026"
 
 
-async def test_student_create_freetext_reuses_existing_case_insensitive(admin_client):
+async def test_student_create_freetext_reuses_existing_case_insensitive(admin_client, academic_setup):
     """Repeated / case-variant free-text placement reuses the same rows (no duplicates)."""
     payload = {
         "admission_date": "2025-08-01", "program": "ICS", "class_name": "Part 1",
         "section": "A", "academic_session": "2025-2026", "password": "Student!2025",
+        "campus_shift_id": academic_setup["shift_id"],
     }
     r1 = await admin_client.post("/api/v1/students", json={
-        "full_name": "Reuse One", "email": "reuse.1@test.edu", **payload})
+        "full_name": "Reuse One", "email": "reuse.1@test.edu", "roll_number": 1, **payload})
     assert r1.status_code == 200, r1.text
     # Same names, different case and surrounding whitespace -> must reuse, not duplicate.
     r2 = await admin_client.post("/api/v1/students", json={
-        "full_name": "Reuse Two", "email": "reuse.2@test.edu",
+        "full_name": "Reuse Two", "email": "reuse.2@test.edu", "roll_number": 2,
         "admission_date": "2025-08-01", "program": " ics ", "class_name": " part 1 ",
-        "section": " a ", "academic_session": "2025-2026", "password": "Student!2025"})
+        "section": " a ", "academic_session": "2025-2026", "password": "Student!2025",
+        "campus_shift_id": academic_setup["shift_id"]})
     assert r2.status_code == 200, r2.text
 
     progs = (await admin_client.get("/api/v1/programs")).json()

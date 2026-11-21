@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import ForbiddenError
 from app.models.academic import ClassLevel, Program, Section, Subject
 from app.models.assignments import TeacherAssignment
+from app.models.attendance import AttendanceRecord
 from app.models.communications import Notice
 from app.models.examinations import Examination, StudentMark
 from app.models.fees import FeeInvoice, Payment
@@ -100,6 +101,42 @@ async def admin_dashboard(db: AsyncSession) -> dict[str, Any]:
         select(Notice).order_by(Notice.published_at.desc()).limit(5)
     )).scalars().all()
 
+    # Top performers — real data only (never fabricated). Best in Marks uses
+    # average examination percentage; Best in Attendance uses the present/absent
+    # ratio. Each appears only when sufficient records exist.
+    top_performers: list[dict[str, Any]] = []
+    mk = (await db.execute(
+        select(StudentMark.student_id, func.avg(StudentMark.percentage))
+        .where(StudentMark.is_absent.is_(False))
+        .group_by(StudentMark.student_id)
+        .order_by(func.avg(StudentMark.percentage).desc())
+        .limit(1)
+    )).first()
+    if mk:
+        sid, avg = mk
+        stu = await db.get(Student, sid)
+        if stu:
+            top_performers.append({"student_id": str(sid), "name": stu.full_name, "category": "Best in Marks", "score": round(float(avg), 1), "metric": "avg %"})
+    att_rows = (await db.execute(select(AttendanceRecord.student_id, AttendanceRecord.status))).all()
+    by_stu: dict[str, list[str]] = {}
+    for sid, st in att_rows:
+        by_stu.setdefault(str(sid), []).append(st)
+    best_att: dict[str, Any] | None = None
+    for sid, sts in by_stu.items():
+        if len(sts) < 3:
+            continue
+        attended = sum(1 for s in sts if s in ("present", "late"))
+        elig = attended + sum(1 for s in sts if s == "absent")
+        if elig == 0:
+            continue
+        pct = round(attended / elig * 100, 1)
+        if best_att is None or pct > best_att["score"]:
+            best_att = {"student_id": sid, "score": pct}
+    if best_att:
+        stu = await db.get(Student, best_att["student_id"])
+        if stu:
+            top_performers.append({"student_id": best_att["student_id"], "name": stu.full_name, "category": "Best in Attendance", "score": best_att["score"], "metric": "% present"})
+
     return {
         "stats": [
             {"label": "Total Students", "value": int(active_students), "tone": "primary"},
@@ -120,6 +157,7 @@ async def admin_dashboard(db: AsyncSession) -> dict[str, Any]:
         "outstanding_balance": round(float(outstanding), 2),
         "recent_notices": [{"id": str(n.id), "title": n.title, "published_at": n.published_at.isoformat()} for n in recent_notices],
         "recent_activity": [],
+        "top_performers": top_performers,
     }
 
 

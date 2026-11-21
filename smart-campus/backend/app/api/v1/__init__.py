@@ -6,6 +6,7 @@ from app.api.v1 import (
     attendance,
     audit,
     auth,
+    campus,
     dashboard,
     examinations,
     fees,
@@ -23,6 +24,7 @@ from app.api.v1 import (
 api_router = APIRouter()
 api_router.include_router(auth.router)
 api_router.include_router(academic.router)
+api_router.include_router(campus.router)
 api_router.include_router(students.router)
 api_router.include_router(teachers.router)
 api_router.include_router(timetable.router)

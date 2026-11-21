@@ -25,6 +25,8 @@ const StudentFormPage = lazy(() => import("@/features/students/StudentFormPage")
 const TeacherListPage = lazy(() => import("@/features/teachers/TeacherListPage").then((m) => ({ default: m.TeacherListPage })));
 const TeacherDetailPage = lazy(() => import("@/features/teachers/TeacherDetailPage").then((m) => ({ default: m.TeacherDetailPage })));
 const TeacherFormPage = lazy(() => import("@/features/teachers/TeacherFormPage").then((m) => ({ default: m.TeacherFormPage })));
+const ShiftsPage = lazy(() => import("@/features/campus/ShiftsPage").then((m) => ({ default: m.ShiftsPage })));
+const RollSchemesPage = lazy(() => import("@/features/campus/RollSchemesPage").then((m) => ({ default: m.RollSchemesPage })));
 const AttendanceMarkingPage = lazy(() => import("@/features/attendance/AttendanceMarkingPage").then((m) => ({ default: m.AttendanceMarkingPage })));
 const AttendanceHistoryPage = lazy(() => import("@/features/attendance/AttendanceHistoryPage").then((m) => ({ default: m.AttendanceHistoryPage })));
 const ExaminationListPage = lazy(() => import("@/features/examinations/ExaminationListPage").then((m) => ({ default: m.ExaminationListPage })));
@@ -78,6 +80,10 @@ export function AppRoutes() {
           <Route path="teachers" element={<Protected roles={["admin"]}><TeacherListPage /></Protected>} />
           <Route path="teachers/new" element={<Protected roles={["admin"]}><TeacherFormPage /></Protected>} />
           <Route path="teachers/:id" element={<Protected roles={["admin"]}><TeacherDetailPage /></Protected>} />
+
+          {/* Campus shifts & roll-number schemes */}
+          <Route path="campus/shifts" element={<Protected roles={["admin"]}><ShiftsPage /></Protected>} />
+          <Route path="campus/roll-schemes" element={<Protected roles={["admin"]}><RollSchemesPage /></Protected>} />
 
           {/* Attendance */}
           <Route path="attendance/mark" element={<Protected roles={["teacher"]}><AttendanceMarkingPage /></Protected>} />

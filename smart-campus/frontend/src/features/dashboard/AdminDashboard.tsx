@@ -1,24 +1,29 @@
 import { Users, GraduationCap, Wallet, TrendingUp, Layers, Megaphone } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
-import { PageHeader, StatCard, Card, CardHeader, ErrorState, Skeleton } from "@/components/common";
+import { PageHeader, StatCard, Card, CardHeader, ErrorState, Skeleton, HeroBanner } from "@/components/common";
 import { TrendAreaChart, CategoryBarChart, DistributionDonut, HorizontalBarChart } from "@/components/charts";
 import { useAdminDashboard } from "./queries";
+import { useAuth } from "@/hooks/useAuth";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
 
 export function AdminDashboard() {
   const { data, isLoading, isError, refetch } = useAdminDashboard();
+  const { profile } = useAuth();
   const navigate = useNavigate();
 
   if (isError) return <ErrorState message="Failed to load dashboard data." onRetry={() => refetch()} />;
   if (isLoading || !data) return <DashboardSkeleton />;
 
   const stat = (i: number) => Number(data.stats[i]?.value ?? 0);
+  const firstName = profile?.user.full_name.split(" ")[0] ?? "Admin";
 
   return (
     <div>
-      <PageHeader title="Administrator Dashboard" description="College-wide overview across enrolment, finance and performance." />
+      <HeroBanner emoji="🎓" title="College at a Glance" subtitle={`Welcome back, ${firstName}`}>
+        <span className="opacity-90">{stat(0)} students · {stat(1)} teachers · {stat(2)} active classes · {formatCurrency(stat(4))} collected</span>
+      </HeroBanner>
 
-      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
         <Link to="/students"><StatCard label="Total Students" value={stat(0)} tone="primary" icon={Users} /></Link>
         <Link to="/teachers"><StatCard label="Total Teachers" value={stat(1)} tone="primary" icon={GraduationCap} /></Link>
         <Link to="/students"><StatCard label="Active Classes" value={stat(2)} tone="primary" icon={Layers} /></Link>
@@ -68,6 +73,26 @@ export function AdminDashboard() {
           </div>
         </Card>
       </div>
+
+      {data.top_performers.length > 0 && (
+        <div className="mt-4 grid sm:grid-cols-2 gap-4">
+          {data.top_performers.map((p) => (
+            <Card key={p.student_id} className="p-5 flex items-center gap-4 animate-slideUp">
+              <div className="h-12 w-12 rounded-full bg-indigo/10 text-indigo grid place-items-center font-bold text-sm shrink-0">
+                {p.name.split(" ").slice(0, 2).map((w) => w[0]?.toUpperCase() ?? "").join("")}
+              </div>
+              <div className="min-w-0">
+                <p className="font-semibold text-ink truncate">{p.name}</p>
+                <p className="text-xs text-slate-muted">{p.category}</p>
+              </div>
+              <div className="ml-auto text-right">
+                <p className="text-xl font-bold text-indigo">{p.score}</p>
+                <p className="text-[11px] text-slate-muted">{p.metric}</p>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
 
       <Card className="mt-4">
         <CardHeader title="Recent notices" action={<Link to="/notices" className="text-xs text-indigo font-medium">View all</Link>} />

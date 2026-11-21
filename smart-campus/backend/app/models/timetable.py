@@ -55,6 +55,11 @@ class TimetableEntry(UUIDPK, TimestampMixin, Base):
     academic_session_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("academic_sessions.id", ondelete="RESTRICT"), nullable=False
     )
+    # Optional campus shift filter (morning/evening timetables). Nullable so
+    # legacy entries and shift-agnostic schedules remain valid.
+    campus_shift_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("campus_shifts.id", ondelete="SET NULL"), nullable=True
+    )
     day_of_week: Mapped[str] = mapped_column(String(12), nullable=False)
     start_time: Mapped[time] = mapped_column(Time, nullable=False)
     end_time: Mapped[time] = mapped_column(Time, nullable=False)

@@ -17,13 +17,19 @@ async def _policy(admin_client):
     return resp.json()
 
 
+_ROLL = [0]
+
+
 async def _student(admin_client, setup, email):
+    _ROLL[0] += 1
     resp = await admin_client.post("/api/v1/students", json={
         "full_name": "Stu Exam", "email": email, "admission_date": "2025-08-01",
+        "campus_shift_id": setup["shift_id"], "roll_number": _ROLL[0],
         "program": setup["program_name"], "class_name": setup["class_name"],
         "section": setup["section_name"], "academic_session": setup["session_name"],
         "password": "Student!2025",
     })
+    assert resp.status_code == 200, resp.text
     return resp.json()
 
 

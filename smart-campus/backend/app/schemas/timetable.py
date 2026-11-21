@@ -42,6 +42,7 @@ class TimetableEntryIn(BaseModel):
     section_id: str | None = None
     classroom_id: str | None = None
     period_name: str | None = None
+    campus_shift_id: str | None = None
 
     @model_validator(mode="after")
     def _order(self):
@@ -62,7 +63,21 @@ class TimetableEntryOut(ORMBase):
     section_id: str | None = None
     classroom_id: str | None = None
     period_name: str | None = None
+    campus_shift_id: str | None = None
     is_cancelled: bool
+
+
+class TimetableEntryUpdateIn(BaseModel):
+    day_of_week: str | None = Field(default=None, pattern="^(monday|tuesday|wednesday|thursday|friday|saturday|sunday)$")
+    start_time: time | None = None
+    end_time: time | None = None
+    subject_id: str | None = None
+    teacher_id: str | None = None
+    class_id: str | None = None
+    section_id: str | None = None
+    classroom_id: str | None = None
+    period_name: str | None = None
+    campus_shift_id: str | None = None
 
 
 class TimetableEntryDetailOut(TimetableEntryOut):

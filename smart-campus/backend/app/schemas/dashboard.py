@@ -34,6 +34,7 @@ class AdminDashboard(BaseModel):
     outstanding_balance: float
     recent_notices: list[dict[str, Any]]
     recent_activity: list[dict[str, Any]]
+    top_performers: list[dict[str, Any]]   # achievement cards (real data only)
 
 
 class TeacherDashboard(BaseModel):

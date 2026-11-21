@@ -14,6 +14,7 @@ from app.schemas.timetable import (
     TimetableEntryDetailOut,
     TimetableEntryIn,
     TimetableEntryOut,
+    TimetableEntryUpdateIn,
     TimetablePeriodIn,
     TimetablePeriodOut,
 )
@@ -48,6 +49,7 @@ async def list_entries(
     class_id: str | None = Query(None),
     section_id: str | None = Query(None),
     academic_session_id: str | None = Query(None),
+    campus_shift_id: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
 ):
     stmt = (
@@ -66,6 +68,8 @@ async def list_entries(
         stmt = stmt.where((TimetableEntry.section_id == section_id) | (TimetableEntry.section_id.is_(None)))
     if academic_session_id:
         stmt = stmt.where(TimetableEntry.academic_session_id == academic_session_id)
+    if campus_shift_id:
+        stmt = stmt.where(TimetableEntry.campus_shift_id == campus_shift_id)
     rows = (await db.execute(stmt)).scalars().all()
     out = []
     for e in rows:
@@ -83,6 +87,22 @@ async def cancel_entry(entry_id: str, admin: User = Depends(require_admin()), db
     if entry is None:
         raise NotFoundError("Timetable entry not found.")
     return TimetableEntryOut.model_validate(await timetable_service.cancel_entry(db, admin, entry))
+
+
+@router.patch("/entries/{entry_id}", response_model=TimetableEntryOut, dependencies=[Depends(require_admin())])
+async def update_entry(entry_id: str, payload: TimetableEntryUpdateIn, admin: User = Depends(require_admin()), db: AsyncSession = Depends(get_db)):
+    entry = await db.get(TimetableEntry, entry_id)
+    if entry is None:
+        raise NotFoundError("Timetable entry not found.")
+    return TimetableEntryOut.model_validate(await timetable_service.update_entry(db, admin, entry, payload.model_dump(exclude_unset=True)))
+
+
+@router.delete("/entries/{entry_id}", status_code=204, dependencies=[Depends(require_admin())])
+async def delete_entry(entry_id: str, admin: User = Depends(require_admin()), db: AsyncSession = Depends(get_db)):
+    entry = await db.get(TimetableEntry, entry_id)
+    if entry is None:
+        raise NotFoundError("Timetable entry not found.")
+    await timetable_service.delete_entry(db, admin, entry)
 
 
 @router.get("/me", tags=["timetable-self"], dependencies=[Depends(get_current_user)])

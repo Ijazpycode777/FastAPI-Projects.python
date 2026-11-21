@@ -1,12 +1,14 @@
-import { CalendarCheck, FileText, Wallet, BookOpen, Clock } from "lucide-react";
+import { FileText, Wallet, BookOpen, Clock } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
-import { PageHeader, StatCard, Card, CardHeader, ErrorState, Skeleton, EmptyState } from "@/components/common";
+import { StatCard, Card, CardHeader, ErrorState, Skeleton, EmptyState, HeroBanner } from "@/components/common";
 import { AttendanceDonut, CategoryBarChart } from "@/components/charts";
 import { useStudentDashboard } from "./queries";
+import { useAuth } from "@/hooks/useAuth";
 import { formatCurrency, formatTime } from "@/lib/utils";
 
 export function StudentDashboard() {
   const { data, isLoading, isError, refetch } = useStudentDashboard();
+  const { profile } = useAuth();
   const navigate = useNavigate();
   if (isError) return <ErrorState message="Failed to load your dashboard." onRetry={() => refetch()} />;
   if (isLoading || !data) return (
@@ -19,12 +21,14 @@ export function StudentDashboard() {
 
   const brk = data.attendance_breakdown;
   const stat = (i: number) => Number(data.stats[i]?.value ?? 0);
+  const firstName = profile?.user.full_name.split(" ")[0] ?? "Student";
 
   return (
     <div>
-      <PageHeader title="Student Dashboard" description="Your attendance, lectures, fees and academic performance." />
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Attendance" value={`${data.attendance_percentage}%`} tone={data.attendance_percentage >= 75 ? "success" : "warning"} icon={CalendarCheck} />
+      <HeroBanner emoji="📚" title="Your Academic Snapshot" subtitle={`Welcome back, ${firstName}`}>
+        <span className="opacity-90">Attendance {data.attendance_percentage}% · {stat(1)} exams taken · {data.recent_materials.length} study materials</span>
+      </HeroBanner>
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
         <StatCard label="Exams Taken" value={stat(1)} tone="primary" icon={FileText} />
         <StatCard label="Outstanding Fees" value={formatCurrency(stat(2))} tone={stat(2) > 0 ? "danger" : "success"} icon={Wallet} />
         <StatCard label="Materials" value={stat(3)} tone="primary" icon={BookOpen} />
@@ -32,8 +36,7 @@ export function StudentDashboard() {
 
       <div className="grid lg:grid-cols-3 gap-4 mt-6">
         <Card>
-          <CardHeader title="Attendance" subtitle="Present · Absent · Leave"
-            action={<Link to="/attendance" className="text-xs text-indigo font-medium">History</Link>} />
+          <CardHeader title="Attendance" subtitle="Present · Absent · Leave — click to view history" />
           <div className="p-5 flex justify-center">
             <AttendanceDonut
               present={brk.present} absent={brk.absent} leave={brk.leave}
