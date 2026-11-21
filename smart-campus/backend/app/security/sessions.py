@@ -19,6 +19,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import Response
+from starlette.requests import Request
 
 from app.core.config import settings
 
@@ -36,13 +37,32 @@ def session_expires_at() -> datetime:
     return datetime.now(timezone.utc) + timedelta(seconds=settings.session_max_age_seconds)
 
 
-def set_session_cookie(response: Response, token: str, expires_seconds: int) -> None:
+def _request_is_https(request: Request) -> bool:
+    """True when the request reached the app over HTTPS (directly or via a TLS-terminating proxy).
+
+    Browsers refuse to store a cookie carrying the ``Secure`` attribute when it
+    is delivered over plain HTTP. The CSRF/session cookie ``Secure`` flag is
+    therefore honored only when the connection is actually HTTPS — otherwise
+    the cookie would be silently dropped and the double-submit CSRF flow would
+    reject every state-changing request (the exact "CSRF token missing or
+    invalid." symptom). Behind Render's TLS-terminating proxy the app reads
+    ``X-Forwarded-Proto`` (uvicorn ``--proxy-headers``); the header is also
+    checked directly so the detection is correct even without that flag.
+    """
+    if request.url.scheme == "https":
+        return True
+    forwarded = request.headers.get("x-forwarded-proto", "")
+    # X-Forwarded-Proto may be a comma-separated list when proxies are chained.
+    return forwarded.split(",")[0].strip().lower() == "https"
+
+
+def set_session_cookie(response: Response, token: str, expires_seconds: int, request: Request) -> None:
     response.set_cookie(
         key=settings.session_cookie_name,
         value=token,
         max_age=expires_seconds,
         httponly=True,
-        secure=settings.session_cookie_secure,
+        secure=settings.session_cookie_secure and _request_is_https(request),
         samesite=settings.session_cookie_samesite,
         path="/",
     )
@@ -52,13 +72,13 @@ def clear_session_cookie(response: Response) -> None:
     response.delete_cookie(settings.session_cookie_name, path="/")
 
 
-def set_csrf_cookie(response: Response, token: str) -> None:
+def set_csrf_cookie(response: Response, token: str, request: Request) -> None:
     response.set_cookie(
         key=settings.csrf_cookie_name,
         value=token,
         max_age=settings.session_max_age_seconds,
         httponly=False,  # JS must read it for double-submit
-        secure=settings.csrf_secure,
+        secure=settings.csrf_secure and _request_is_https(request),
         samesite=settings.session_cookie_samesite,
         path="/",
     )

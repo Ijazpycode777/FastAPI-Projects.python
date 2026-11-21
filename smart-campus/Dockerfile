@@ -70,5 +70,9 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD curl -fsS http://localhost:8000/health || exit 1
 
-# Run migrations on container start, then launch uvicorn
-CMD ["sh", "-c", "cd /app/backend && alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers ${WEB_CONCURRENCY:-2}"]
+# Run migrations on container start, then launch uvicorn.
+# --proxy-headers: trust X-Forwarded-Proto / X-Forwarded-For from Render's
+# TLS-terminating proxy so request.url.scheme is "https" in production. This
+# keeps Secure-cookie detection, audit IPs and any absolute URL generation
+# correct behind the reverse proxy.
+CMD ["sh", "-c", "cd /app/backend && alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --proxy-headers --workers ${WEB_CONCURRENCY:-2}"]

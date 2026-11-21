@@ -35,7 +35,7 @@ export function StudentDashboard() {
       </div>
 
       <div className="grid lg:grid-cols-3 gap-4 mt-6">
-        <Card>
+        <Card className="card-hover">
           <CardHeader title="Attendance" subtitle="Present · Absent · Leave — click to view history" />
           <div className="p-5 flex justify-center">
             <AttendanceDonut
@@ -66,15 +66,21 @@ export function StudentDashboard() {
           ) : <EmptyState icon={Clock} title="No lectures today" />}
         </Card>
 
-        <Card>
-          <CardHeader title="Fee summary"
+        <Card className="card-hover">
+          <CardHeader title="Fee summary" subtitle="Paid vs total payable · click to view"
             action={<Link to="/student/fees" className="text-xs text-indigo font-medium">Details</Link>} />
           <div className="p-5 space-y-3">
             <Row label="Total payable" value={formatCurrency(data.fee_summary.total_invoiced)} />
             <Row label="Paid" value={formatCurrency(data.fee_summary.total_paid)} tone="text-teal" />
             <Row label="Outstanding" value={formatCurrency(data.fee_summary.total_outstanding)} tone="text-rose" />
-            <div className="h-2 w-full rounded-full bg-slate-bg overflow-hidden mt-1">
-              <div className="h-full bg-teal rounded-full"
+            <div
+              className="h-2.5 w-full rounded-full bg-slate-bg overflow-hidden mt-1 cursor-pointer transition-all hover:h-3"
+              onClick={() => navigate("/student/fees")}
+              role="button"
+              aria-label="Open fee details"
+              title="Click to view fee details"
+            >
+              <div className="h-full bg-gradient-to-r from-teal to-teal-soft rounded-full"
                 style={{ width: `${data.fee_summary.total_invoiced ? (data.fee_summary.total_paid / data.fee_summary.total_invoiced) * 100 : 0}%` }} />
             </div>
           </div>
@@ -82,8 +88,8 @@ export function StudentDashboard() {
       </div>
 
       <div className="grid lg:grid-cols-3 gap-4 mt-4">
-        <Card className="lg:col-span-2">
-          <CardHeader title="Academic performance" subtitle="Percentage per subject"
+        <Card className="lg:col-span-2 card-hover">
+          <CardHeader title="Academic performance" subtitle="Percentage per subject · click to view"
             action={<Link to="/results" className="text-xs text-indigo font-medium">Results</Link>} />
           <div className="p-4 cursor-pointer" onClick={() => navigate("/results")} role="button" aria-label="Open results">
             {data.subject_marks.length

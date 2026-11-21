@@ -111,6 +111,18 @@ export async function api<T = unknown>(path: string, opts: RequestOptions = {}):
         const retryText = await res.text();
         return (retryText ? JSON.parse(retryText) : undefined) as T;
       }
+      // Surface the RETRY's real error (e.g. 401 session expired, 400 validation,
+      // 403 role) instead of the stale CSRF message from the first attempt —
+      // otherwise a non-CSRF failure after a successful token refresh is
+      // misreported to the user as "CSRF token missing or invalid."
+      const retryText = await res.text();
+      let retryErr: { code?: string; message?: string; details?: { field: string; message: string }[] } | undefined;
+      if (retryText) {
+        try {
+          retryErr = (JSON.parse(retryText) as { error?: typeof retryErr })?.error;
+        } catch { /* non-JSON body — fall back to a generic message below */ }
+      }
+      throw new ApiError(res.status, retryErr?.code ?? "ERROR", retryErr?.message ?? `Request failed (${res.status})`, retryErr?.details ?? []);
     }
     throw new ApiError(res.status, err?.code ?? "ERROR", err?.message ?? `Request failed (${res.status})`, err?.details ?? []);
   }

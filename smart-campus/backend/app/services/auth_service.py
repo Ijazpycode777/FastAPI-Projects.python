@@ -143,9 +143,9 @@ async def login(
     )
     await db.commit()
 
-    set_session_cookie(response, token, settings.session_max_age_seconds)
+    set_session_cookie(response, token, settings.session_max_age_seconds, request)
     csrf = generate_csrf_token()
-    set_csrf_cookie(response, csrf)
+    set_csrf_cookie(response, csrf, request)
     return user, csrf
 
 
@@ -169,10 +169,10 @@ async def logout(db: AsyncSession, request: Request, response: Response, user: U
     clear_csrf_cookie(response)
 
 
-async def issue_csrf(response: Response, user: Optional[User]) -> str:
+async def issue_csrf(response: Response, request: Request, user: Optional[User]) -> str:
     """Issue a fresh CSRF token cookie. Used after login & on demand."""
     token = generate_csrf_token()
-    set_csrf_cookie(response, token)
+    set_csrf_cookie(response, token, request)
     return token
 
 

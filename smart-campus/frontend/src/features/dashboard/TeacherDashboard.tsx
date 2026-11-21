@@ -47,8 +47,8 @@ export function TeacherDashboard() {
       </div>
 
       <div className="grid lg:grid-cols-3 gap-4 mt-6">
-        <Card className="lg:col-span-2">
-          <CardHeader title="Weekly timetable" subtitle="Your scheduled lectures"
+        <Card className="lg:col-span-2 card-hover">
+          <CardHeader title="Weekly timetable" subtitle="Your scheduled lectures · click a lecture to open"
             action={<Link to="/timetable" className="text-xs text-indigo font-medium">Full timetable</Link>} />
           {byDay.length ? (
             <div className="p-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
@@ -72,8 +72,8 @@ export function TeacherDashboard() {
           ) : <EmptyState icon={CalendarDays} title="No lectures scheduled" description="Your timetable is empty." />}
         </Card>
 
-        <Card>
-          <CardHeader title="Class distribution" subtitle="Students per assigned class" />
+        <Card className="card-hover">
+          <CardHeader title="Class distribution" subtitle="Students per assigned class · click to view" />
           <div className="p-4 cursor-pointer" onClick={() => navigate("/timetable")} role="button" aria-label="Open timetable">
             {data.class_distribution.length
               ? <HorizontalBarChart data={data.class_distribution} height={260} />
@@ -83,8 +83,8 @@ export function TeacherDashboard() {
       </div>
 
       <div className="grid lg:grid-cols-2 gap-4 mt-4">
-        <Card>
-          <CardHeader title="Student performance" subtitle="Average mark % per subject"
+        <Card className="card-hover">
+          <CardHeader title="Student performance" subtitle="Average mark % per subject · click to view"
             action={<Link to="/results" className="text-xs text-indigo font-medium">View</Link>} />
           <div className="p-4 cursor-pointer" onClick={() => navigate("/results")} role="button" aria-label="Open results">
             {data.student_performance.length

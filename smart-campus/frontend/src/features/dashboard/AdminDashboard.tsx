@@ -33,8 +33,8 @@ export function AdminDashboard() {
       </div>
 
       <div className="grid lg:grid-cols-3 gap-4 mt-6">
-        <Card>
-          <CardHeader title="Student enrolment" subtitle="Active students by program"
+        <Card className="card-hover">
+          <CardHeader title="Student enrolment" subtitle="Active students by program · click to view"
             action={<Link to="/students" className="text-xs text-indigo font-medium">View</Link>} />
           <div className="p-4 cursor-pointer" onClick={() => navigate("/students")} role="button" aria-label="Open student list">
             {data.program_distribution.length
@@ -42,8 +42,8 @@ export function AdminDashboard() {
               : <p className="text-sm text-slate-muted py-10 text-center">No enrolled students yet.</p>}
           </div>
         </Card>
-        <Card className="lg:col-span-2">
-          <CardHeader title="Fee collection" subtitle="Collected amount by month"
+        <Card className="lg:col-span-2 card-hover">
+          <CardHeader title="Fee collection" subtitle="Collected amount by month · click to view"
             action={<Link to="/fees" className="text-xs text-indigo font-medium">View</Link>} />
           <div className="p-4 cursor-pointer" onClick={() => navigate("/fees")} role="button" aria-label="Open fee management">
             {data.fee_collection_trend.length
@@ -54,8 +54,8 @@ export function AdminDashboard() {
       </div>
 
       <div className="grid lg:grid-cols-3 gap-4 mt-4">
-        <Card className="lg:col-span-2">
-          <CardHeader title="Class & section comparison" subtitle="Enrolled students per class · section"
+        <Card className="lg:col-span-2 card-hover">
+          <CardHeader title="Class & section comparison" subtitle="Enrolled students per class · section · click to view"
             action={<Link to="/students" className="text-xs text-indigo font-medium">View</Link>} />
           <div className="p-4 cursor-pointer" onClick={() => navigate("/students")} role="button" aria-label="Open student list">
             {data.class_comparison.length
@@ -63,8 +63,8 @@ export function AdminDashboard() {
               : <p className="text-sm text-slate-muted py-10 text-center">No enrolments yet.</p>}
           </div>
         </Card>
-        <Card>
-          <CardHeader title="Examination performance" subtitle="Average score by exam type"
+        <Card className="card-hover">
+          <CardHeader title="Examination performance" subtitle="Average score by exam type · click to view"
             action={<Link to="/examinations" className="text-xs text-indigo font-medium">View</Link>} />
           <div className="p-4 cursor-pointer" onClick={() => navigate("/examinations")} role="button" aria-label="Open examinations">
             {data.examination_performance.length

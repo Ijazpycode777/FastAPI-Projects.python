@@ -25,9 +25,9 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.post("/csrf", response_model=CsrfOut)
-async def get_csrf(response: Response):
+async def get_csrf(request: Request, response: Response):
     """Issue a CSRF token cookie. Safe to call before login."""
-    token = await auth_service.issue_csrf(response, None)
+    token = await auth_service.issue_csrf(response, request, None)
     return CsrfOut(csrf_token=token)
 
 

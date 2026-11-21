@@ -172,7 +172,7 @@ export function AttendanceDonut({
           type="button"
           onClick={onCentreClick}
           disabled={!onCentreClick}
-          className="absolute inset-0 flex flex-col items-center justify-center rounded-full disabled:cursor-default"
+          className="absolute inset-0 flex flex-col items-center justify-center rounded-full cursor-pointer transition-transform hover:scale-[1.02] disabled:cursor-default disabled:hover:scale-100"
           aria-label="Open full attendance history"
         >
           <span className="text-3xl font-bold text-ink leading-none">{pct}%</span>

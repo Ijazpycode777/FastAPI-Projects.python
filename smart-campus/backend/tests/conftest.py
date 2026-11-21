@@ -38,8 +38,25 @@ from app.database.session import get_db  # noqa: E402
 from app.main import app  # noqa: E402
 from app.middleware import csrf as csrf_module  # noqa: E402
 
-# Bypass CSRF in the test suite (CSRF logic is unit-tested separately where useful).
+# Bypass CSRF in the test suite by default so endpoint tests can focus on
+# behaviour. Real CSRF validation is exercised via the `real_csrf` fixture
+# (see tests/test_csrf.py) which restores the original matcher for a test.
+_real_csrf_tokens_match = csrf_module.csrf_tokens_match
 csrf_module.csrf_tokens_match = lambda a, b: True
+
+
+@pytest.fixture
+def real_csrf():
+    """Restore the real CSRF token matcher for tests that exercise CSRF end-to-end.
+
+    The default suite mock (``csrf_tokens_match = lambda a, b: True``) is
+    swapped back to the real hmac-compare function for the duration of the
+    test, then restored so other tests keep their fast-path bypass.
+    """
+    saved = csrf_module.csrf_tokens_match
+    csrf_module.csrf_tokens_match = _real_csrf_tokens_match
+    yield
+    csrf_module.csrf_tokens_match = saved
 
 
 @pytest_asyncio.fixture

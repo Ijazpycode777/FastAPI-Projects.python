@@ -35,7 +35,10 @@ _EXEMPT_PREFIXES = (
 
 
 def is_exempt(path: str, exempt: Iterable[str] = _EXEMPT_PREFIXES) -> bool:
-    return any(path == p or path.startswith(p + "/") or path.startswith(p) for p in exempt)
+    # Exact match or a true sub-path (trailing slash). A bare startswith(p)
+    # would over-exempt — e.g. /api/v1/auth/login-anything would slip through —
+    # widening the unsafe-method surface, so keep matching precise.
+    return any(path == p or path.startswith(p + "/") for p in exempt)
 
 
 class CSRFMiddleware(BaseHTTPMiddleware):
