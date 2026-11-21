@@ -7,10 +7,22 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ConflictError, ValidationError
+from app.models.academic import Department
 from app.models.people import Teacher
 from app.models.user import User
 from app.repositories.audit import record_audit, snapshot
 from app.security.password import hash_password
+
+
+async def _require_department(db: AsyncSession, department_id: str | None) -> None:
+    """Validate that ``department_id`` references one of the five fixed
+    departments. Raises ValidationError (4xx) — never a 500 — on a missing or
+    nonexistent id. Departments are not creatable through the API, so an
+    invalid id can only be a client error."""
+    if not department_id:
+        raise ValidationError("department_id is required.")
+    if (await db.execute(select(Department).where(Department.id == department_id))).scalar_one_or_none() is None:
+        raise ValidationError("department_id does not reference a valid department.")
 
 
 async def create_teacher(db: AsyncSession, actor: User, data: dict[str, Any]) -> Teacher:
@@ -25,6 +37,9 @@ async def create_teacher(db: AsyncSession, actor: User, data: dict[str, Any]) ->
         raise ConflictError("A user with that email already exists.")
     if (await db.execute(select(Teacher).where(Teacher.employee_id == data["employee_id"]))).scalar_one_or_none():
         raise ConflictError("Employee ID already in use.")
+
+    # Validate the department FK before any inserts (4xx, not a 500 on commit).
+    await _require_department(db, data.get("department_id"))
 
     user = User(
         email=email,
@@ -43,7 +58,8 @@ async def create_teacher(db: AsyncSession, actor: User, data: dict[str, Any]) ->
         full_name=data["full_name"],
         email=email,
         phone=data.get("phone"),
-        department=data.get("department"),
+        department_id=data["department_id"],
+        subject=data["subject"],
         designation=data.get("designation", "Lecturer"),
         joining_date=data["joining_date"],
         employment_status="active",
@@ -52,7 +68,8 @@ async def create_teacher(db: AsyncSession, actor: User, data: dict[str, Any]) ->
     await record_audit(
         db, actor_id=actor.id, actor_role=actor.role,
         action="teacher.create", resource_type="teacher", resource_id=teacher.id,
-        after={"employee_id": teacher.employee_id, "email": email},
+        after={"employee_id": teacher.employee_id, "email": email,
+               "department_id": teacher.department_id, "subject": teacher.subject},
     )
     await db.commit()
     await db.refresh(teacher)
@@ -60,6 +77,9 @@ async def create_teacher(db: AsyncSession, actor: User, data: dict[str, Any]) ->
 
 
 async def update_teacher(db: AsyncSession, actor: User, teacher: Teacher, data: dict[str, Any]) -> Teacher:
+    # Validate a department change BEFORE mutating (4xx on invalid id).
+    if data.get("department_id") is not None:
+        await _require_department(db, data["department_id"])
     before = await snapshot(teacher)
     for k, v in data.items():
         if v is not None:

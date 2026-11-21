@@ -34,7 +34,7 @@ class TimetablePeriod(UUIDPK, TimestampMixin, Base):
 class TimetableEntry(UUIDPK, TimestampMixin, Base):
     """A scheduled lecture — one row of the weekly grid.
 
-    A teacher/class/section/classroom may not have two overlapping entries.
+    A teacher/class/section may not have two overlapping entries.
     These constraints are also enforced transactionally in the service layer
     because PostgreSQL range exclusion would need a TSRANGE column; we keep
     the data simple here and validate in the application layer with a SELECT
@@ -49,7 +49,6 @@ class TimetableEntry(UUIDPK, TimestampMixin, Base):
         CheckConstraint("end_time > start_time", name="entry_time_order_check"),
         Index("ix_entry_teacher_day", "teacher_id", "day_of_week"),
         Index("ix_entry_class_day", "class_id", "day_of_week"),
-        Index("ix_entry_room_day", "classroom_id", "day_of_week"),
     )
 
     academic_session_id: Mapped[str] = mapped_column(
@@ -70,13 +69,9 @@ class TimetableEntry(UUIDPK, TimestampMixin, Base):
     section_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("sections.id", ondelete="SET NULL"), nullable=True
     )
-    classroom_id: Mapped[str | None] = mapped_column(
-        String(36), ForeignKey("classrooms.id", ondelete="SET NULL"), nullable=True
-    )
     period_name: Mapped[str | None] = mapped_column(String(40), nullable=True)
     is_cancelled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     teacher = relationship("Teacher", back_populates="timetable_entries")
     subject = relationship("Subject")
-    classroom = relationship("Classroom")
     attendance = relationship("AttendanceRecord", back_populates="timetable_entry")

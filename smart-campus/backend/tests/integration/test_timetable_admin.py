@@ -10,7 +10,6 @@ async def _entry(admin_client, setup, teacher_id, day, start, end):
         "start_time": start, "end_time": end,
         "subject_id": setup["subject_id"], "teacher_id": teacher_id,
         "class_id": setup["class_id"], "section_id": setup["section_id"],
-        "classroom_id": setup["classroom_id"],
     })
 
 

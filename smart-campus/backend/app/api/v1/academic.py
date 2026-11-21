@@ -1,4 +1,4 @@
-"""Academic structure: sessions, programs, classes, sections, subjects, classrooms, assignments."""
+"""Academic structure: sessions, programs, classes, sections, subjects, departments, assignments."""
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
@@ -10,7 +10,7 @@ from app.database.session import get_db
 from app.models.academic import (
     AcademicSession,
     ClassLevel,
-    Classroom,
+    Department,
     Program,
     Section,
     Subject,
@@ -21,8 +21,7 @@ from app.schemas.academic import (
     AcademicSessionIn,
     AcademicSessionOut,
     AssignmentIn,
-    ClassroomIn,
-    ClassroomOut,
+    DepartmentOut,
     ClassLevelIn,
     ClassLevelOut,
     ProgramIn,
@@ -108,17 +107,14 @@ async def create_subject(payload: SubjectIn, admin: User = Depends(require_admin
                                                  practical_marks=payload.practical_marks)
 
 
-# ---------------- Classrooms ----------------
-@router.get("/classrooms", response_model=list[ClassroomOut], dependencies=[Depends(get_current_user)])
-async def list_classrooms(db: AsyncSession = Depends(get_db)):
-    rows = await db.execute(select(Classroom).where(Classroom.is_active.is_(True)).order_by(Classroom.room_number))
+# ---------------- Departments ----------------
+# Read-only list of the five fixed, migration-seeded departments. There is
+# intentionally no POST/PATCH/DELETE — departments are not creatable, renamable
+# or deletable through the application.
+@router.get("/departments", response_model=list[DepartmentOut], dependencies=[Depends(get_current_user)])
+async def list_departments(db: AsyncSession = Depends(get_db)):
+    rows = await db.execute(select(Department).order_by(Department.name))
     return list(rows.scalars().all())
-
-
-@router.post("/classrooms", response_model=ClassroomOut, dependencies=[Depends(require_admin())])
-async def create_classroom(payload: ClassroomIn, admin: User = Depends(require_admin()), db: AsyncSession = Depends(get_db)):
-    return await academic_service.create_classroom(db, admin, room_number=payload.room_number, building=payload.building,
-                                                    capacity=payload.capacity, is_active=payload.is_active)
 
 
 # ---------------- Teacher assignments ----------------

@@ -126,7 +126,22 @@ async def admin_client(client, admin_user):
 
 
 @pytest_asyncio.fixture
-async def academic_setup(admin_client):
+async def seed_departments(db):
+    """Insert the five fixed departments.
+
+    Tests build the schema via ``Base.metadata.create_all`` (not alembic), so
+    the ``departments`` table is empty until seeded here. The same rows are
+    seeded by migration 0006 + by ``app.seed`` in production.
+    """
+    from app.models.academic import Department
+    for name in ("Literature", "Computer Science", "Biology",
+                 "Mathematics/Statistics", "Physical Sciences"):
+        db.add(Department(name=name))
+    await db.commit()
+
+
+@pytest_asyncio.fixture
+async def academic_setup(admin_client, seed_departments):
     """Create a coherent academic structure via the API; return a dict of IDs."""
     sess = await admin_client.post("/api/v1/sessions", json={
         "name": "2025-2026", "start_date": "2025-08-01", "end_date": "2026-05-31", "is_active": True,
@@ -146,15 +161,18 @@ async def academic_setup(admin_client):
         "program_id": prog.json()["id"], "code": "CS", "name": "Computer Science",
     })
     assert subj.status_code == 200, subj.text
-    room = await admin_client.post("/api/v1/classrooms", json={"room_number": "101", "capacity": 40})
-    assert room.status_code == 200, room.text
+    # Departments are read-only (migration-seeded); fetch the Computer Science id
+    # for teacher creation. The classroom feature was removed — no room to create.
+    depts = await admin_client.get("/api/v1/departments")
+    assert depts.status_code == 200, depts.text
+    dept_id = next((d["id"] for d in depts.json() if d["name"] == "Computer Science"), depts.json()[0]["id"])
     return {
         "session_id": sess.json()["id"],
         "program_id": prog.json()["id"],
         "class_id": cls.json()["id"],
         "section_id": sec.json()["id"],
         "subject_id": subj.json()["id"],
-        "classroom_id": room.json()["id"],
+        "department_id": dept_id,
         # Free-text placement names (match what was created above so the
         # student create endpoint's find-or-create resolves to the same rows).
         "program_name": "ICS",

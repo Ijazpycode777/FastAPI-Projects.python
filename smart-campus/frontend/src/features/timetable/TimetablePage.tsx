@@ -7,7 +7,7 @@ import { http, ApiError } from "@/lib/api";
 import { useToast } from "@/hooks/useToast";
 import { useAuth } from "@/hooks/useAuth";
 import { formatTime } from "@/lib/utils";
-import type { TimetableEntry, AcademicSession, ClassLevel, Section, Subject, Classroom, Teacher, Page } from "@/types";
+import type { TimetableEntry, AcademicSession, ClassLevel, Section, Subject, Teacher, Page } from "@/types";
 
 const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday"];
 const DAY_LABEL: Record<string, string> = { monday: "Mon", tuesday: "Tue", wednesday: "Wed", thursday: "Thu", friday: "Fri" };
@@ -46,7 +46,6 @@ function ReadOnlyTimetable() {
                     <div key={e.id} className="rounded-lg p-2.5 text-white" style={{ backgroundColor: subjectColor(e.subject_name || e.subject_id) }}>
                       <p className="text-xs font-semibold">{formatTime(e.start_time)} – {formatTime(e.end_time)}</p>
                       <p className="text-sm mt-0.5 truncate">{e.subject_name || e.subject_id.slice(0, 8)}</p>
-                      {e.classroom_number && <p className="text-[11px] opacity-90">Room {e.classroom_number}</p>}
                     </div>
                   )) : <p className="text-xs text-slate-muted text-center py-6">No lectures</p>}
                 </div>
@@ -72,7 +71,6 @@ function AdminTimetable() {
   const classes = useQuery({ queryKey: ["classes"], queryFn: () => http.get<ClassLevel[]>("/classes") });
   const sections = useQuery({ queryKey: ["sections"], queryFn: () => http.get<Section[]>("/sections") });
   const subjects = useQuery({ queryKey: ["subjects"], queryFn: () => http.get<Subject[]>("/subjects") });
-  const classrooms = useQuery({ queryKey: ["classrooms"], queryFn: () => http.get<Classroom[]>("/classrooms") });
   const teachers = useQuery({ queryKey: ["teachers", "all"], queryFn: () => http.get<Page<Teacher>>("/teachers", { page: 1, page_size: 100 }) });
 
   const entries = useQuery({
@@ -99,7 +97,7 @@ function AdminTimetable() {
 
   return (
     <div>
-      <PageHeader title="Timetable Administration" description="Build the weekly schedule. Conflicts (teacher / classroom / class overlap) are rejected."
+      <PageHeader title="Timetable Administration" description="Build the weekly schedule. Conflicts (teacher / class overlap) are rejected."
         action={<button onClick={openCreate} className="btn-primary" disabled={!sessionId}><Plus size={16} /> Add lecture</button>} />
 
       <div className="card p-4 mb-4 grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -145,7 +143,6 @@ function AdminTimetable() {
                     </div>
                     <p className="text-sm mt-0.5 truncate">{e.subject_name || "—"}</p>
                     <p className="text-[11px] opacity-90 truncate">{e.teacher_name || "—"}</p>
-                    {e.classroom_number && <p className="text-[11px] opacity-90">Room {e.classroom_number}</p>}
                   </div>
                 )) : <p className="text-xs text-slate-muted text-center py-6">No lectures</p>}
               </div>
@@ -162,7 +159,6 @@ function AdminTimetable() {
           sections={sections.data ?? []}
           subjects={subjects.data ?? []}
           teachers={teachers.data?.items ?? []}
-          classrooms={classrooms.data ?? []}
           onClose={() => setModalOpen(false)}
           onSaved={() => { setModalOpen(false); queryClient.invalidateQueries({ queryKey: ["timetable"] }); }}
         />
@@ -171,14 +167,13 @@ function AdminTimetable() {
   );
 }
 
-function EntryModal({ editing, sessionId, classes, sections, subjects, teachers, classrooms, onClose, onSaved }: {
+function EntryModal({ editing, sessionId, classes, sections, subjects, teachers, onClose, onSaved }: {
   editing: TimetableEntry | null;
   sessionId: string;
   classes: ClassLevel[];
   sections: Section[];
   subjects: Subject[];
   teachers: Teacher[];
-  classrooms: Classroom[];
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -191,7 +186,6 @@ function EntryModal({ editing, sessionId, classes, sections, subjects, teachers,
     teacher_id: editing?.teacher_id ?? "",
     class_id: editing?.class_id ?? "",
     section_id: editing?.section_id ?? "",
-    classroom_id: editing?.classroom_id ?? "",
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -208,7 +202,7 @@ function EntryModal({ editing, sessionId, classes, sections, subjects, teachers,
       academic_session_id: sessionId, day_of_week: form.day_of_week,
       start_time: form.start_time, end_time: form.end_time,
       subject_id: form.subject_id, teacher_id: form.teacher_id, class_id: form.class_id,
-      section_id: form.section_id || null, classroom_id: form.classroom_id || null,
+      section_id: form.section_id || null,
     };
     try {
       if (editing) await http.patch(`/timetable/entries/${editing.id}`, payload);
@@ -246,10 +240,7 @@ function EntryModal({ editing, sessionId, classes, sections, subjects, teachers,
           <Field label="Section"><Select value={form.section_id} onChange={(e) => setForm({ ...form, section_id: e.target.value })} disabled={!form.class_id}><option value="">All sections</option>{classSections.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</Select></Field>
           <Field label="Subject" required><Select value={form.subject_id} onChange={(e) => setForm({ ...form, subject_id: e.target.value })}><option value="">Select subject…</option>{classSubjects.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</Select></Field>
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Teacher" required><Select value={form.teacher_id} onChange={(e) => setForm({ ...form, teacher_id: e.target.value })}><option value="">Select teacher…</option>{teachers.map((t) => <option key={t.id} value={t.id}>{t.full_name}</option>)}</Select></Field>
-          <Field label="Classroom"><Select value={form.classroom_id} onChange={(e) => setForm({ ...form, classroom_id: e.target.value })}><option value="">—</option>{classrooms.map((c) => <option key={c.id} value={c.id}>{c.room_number}</option>)}</Select></Field>
-        </div>
+        <Field label="Teacher" required><Select value={form.teacher_id} onChange={(e) => setForm({ ...form, teacher_id: e.target.value })}><option value="">Select teacher…</option>{teachers.map((t) => <option key={t.id} value={t.id}>{t.full_name}</option>)}</Select></Field>
         {error && <p className="text-sm text-rose">{error}</p>}
       </div>
     </Modal>

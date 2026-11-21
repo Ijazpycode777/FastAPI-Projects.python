@@ -7,7 +7,8 @@ from tests.conftest import login_as
 async def _setup_teacher(admin_client, setup, email="teacher.t1@test.edu"):
     resp = await admin_client.post("/api/v1/teachers", json={
         "full_name": "Teacher One", "email": email, "phone": "+923000000010",
-        "employee_id": "EMP-T1", "department": "CS", "designation": "Lecturer",
+        "employee_id": "EMP-T1", "department_id": setup["department_id"],
+        "subject": "Computer Science", "designation": "Lecturer",
         "joining_date": "2022-09-01", "password": "Teacher!2025",
     })
     assert resp.status_code == 200, resp.text
@@ -40,7 +41,6 @@ async def _make_timetable_entry(admin_client, setup, teacher_id):
         "start_time": "08:30", "end_time": "09:30",
         "subject_id": setup["subject_id"], "teacher_id": teacher_id,
         "class_id": setup["class_id"], "section_id": setup["section_id"],
-        "classroom_id": setup["classroom_id"],
     })
     assert resp.status_code == 200, resp.text
     return resp.json()

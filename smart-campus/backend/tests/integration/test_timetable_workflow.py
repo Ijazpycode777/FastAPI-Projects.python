@@ -3,7 +3,8 @@ async def _setup_teacher(admin_client, setup, email="teacher.tt1@test.edu"):
     emp = "EMP-" + email.split("@")[0].split(".")[-1].upper()
     resp = await admin_client.post("/api/v1/teachers", json={
         "full_name": "Teacher TT", "email": email, "employee_id": emp,
-        "department": "CS", "designation": "Lecturer", "joining_date": "2022-09-01",
+        "department_id": setup["department_id"], "subject": "Computer Science",
+        "designation": "Lecturer", "joining_date": "2022-09-01",
         "password": "Teacher!2025",
     })
     teacher = resp.json()
@@ -22,7 +23,6 @@ async def test_teacher_double_booked_conflict_rejected(admin_client, academic_se
         "start_time": "08:30", "end_time": "09:30",
         "subject_id": academic_setup["subject_id"], "teacher_id": teacher["id"],
         "class_id": academic_setup["class_id"], "section_id": academic_setup["section_id"],
-        "classroom_id": academic_setup["classroom_id"],
     })
     assert first.status_code == 200
     # Overlapping time (09:00-10:00) for same teacher -> conflict.
@@ -31,29 +31,30 @@ async def test_teacher_double_booked_conflict_rejected(admin_client, academic_se
         "start_time": "09:00", "end_time": "10:00",
         "subject_id": academic_setup["subject_id"], "teacher_id": teacher["id"],
         "class_id": academic_setup["class_id"], "section_id": academic_setup["section_id"],
-        "classroom_id": academic_setup["classroom_id"],
     })
     assert conflict.status_code == 409
 
 
-async def test_classroom_double_booked_conflict_rejected(admin_client, academic_setup):
+async def test_class_double_booked_conflict_rejected(admin_client, academic_setup):
+    """Same class, overlapping time, different teacher → class conflict.
+
+    (Replaces the former classroom-double-book test — the classroom feature
+    was removed; class-level conflict detection remains.)
+    """
     teacher = await _setup_teacher(admin_client, academic_setup, email="teacher.tt2@test.edu")
     first = await admin_client.post("/api/v1/timetable/entries", json={
         "academic_session_id": academic_setup["session_id"], "day_of_week": "tuesday",
         "start_time": "08:30", "end_time": "09:30",
         "subject_id": academic_setup["subject_id"], "teacher_id": teacher["id"],
         "class_id": academic_setup["class_id"], "section_id": academic_setup["section_id"],
-        "classroom_id": academic_setup["classroom_id"],
     })
     assert first.status_code == 200
-    # Same room, overlapping time, different teacher + different class — still conflict on room.
     teacher2 = await _setup_teacher(admin_client, academic_setup, email="teacher.tt3@test.edu")
     conflict = await admin_client.post("/api/v1/timetable/entries", json={
         "academic_session_id": academic_setup["session_id"], "day_of_week": "tuesday",
         "start_time": "09:00", "end_time": "10:00",
         "subject_id": academic_setup["subject_id"], "teacher_id": teacher2["id"],
         "class_id": academic_setup["class_id"], "section_id": academic_setup["section_id"],
-        "classroom_id": academic_setup["classroom_id"],
     })
     assert conflict.status_code == 409
 
@@ -65,7 +66,6 @@ async def test_non_overlapping_entry_accepted(admin_client, academic_setup):
         "start_time": "08:30", "end_time": "09:30",
         "subject_id": academic_setup["subject_id"], "teacher_id": teacher["id"],
         "class_id": academic_setup["class_id"], "section_id": academic_setup["section_id"],
-        "classroom_id": academic_setup["classroom_id"],
     })
     assert e1.status_code == 200
     e2 = await admin_client.post("/api/v1/timetable/entries", json={
@@ -73,6 +73,19 @@ async def test_non_overlapping_entry_accepted(admin_client, academic_setup):
         "start_time": "09:30", "end_time": "10:30",
         "subject_id": academic_setup["subject_id"], "teacher_id": teacher["id"],
         "class_id": academic_setup["class_id"], "section_id": academic_setup["section_id"],
-        "classroom_id": academic_setup["classroom_id"],
     })
     assert e2.status_code == 200
+
+
+async def test_entry_created_without_classroom_field(admin_client, academic_setup):
+    """The classroom field is no longer required (or even accepted) — an entry
+    payload with no classroom_id must succeed. (Spec: remove classroom.)"""
+    teacher = await _setup_teacher(admin_client, academic_setup, email="teacher.tt5@test.edu")
+    resp = await admin_client.post("/api/v1/timetable/entries", json={
+        "academic_session_id": academic_setup["session_id"], "day_of_week": "thursday",
+        "start_time": "08:30", "end_time": "09:30",
+        "subject_id": academic_setup["subject_id"], "teacher_id": teacher["id"],
+        "class_id": academic_setup["class_id"], "section_id": academic_setup["section_id"],
+    })
+    assert resp.status_code == 200, resp.text
+    assert "classroom_id" not in resp.json()

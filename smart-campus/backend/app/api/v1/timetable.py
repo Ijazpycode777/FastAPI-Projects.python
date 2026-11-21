@@ -54,8 +54,7 @@ async def list_entries(
     stmt = (
         select(TimetableEntry)
         .options(selectinload(TimetableEntry.teacher),
-                 selectinload(TimetableEntry.subject),
-                 selectinload(TimetableEntry.classroom))
+                 selectinload(TimetableEntry.subject))
         .where(TimetableEntry.is_cancelled.is_(False))
         .order_by(TimetableEntry.day_of_week, TimetableEntry.start_time)
     )
@@ -73,7 +72,6 @@ async def list_entries(
         d = TimetableEntryDetailOut.model_validate(e)
         d.subject_name = e.subject.name if e.subject else None
         d.teacher_name = e.teacher.full_name if e.teacher else None
-        d.classroom_number = e.classroom.room_number if e.classroom else None
         out.append(d)
     return out
 
@@ -113,5 +111,4 @@ async def my_timetable(user: User = Depends(get_current_user), db: AsyncSession 
         rows = []
     return [{"id": str(e.id), "day": e.day_of_week, "start": e.start_time.isoformat(),
              "end": e.end_time.isoformat(), "subject_id": str(e.subject_id),
-             "class_id": str(e.class_id), "teacher_id": str(e.teacher_id),
-             "classroom_id": str(e.classroom_id) if e.classroom_id else None} for e in rows]
+             "class_id": str(e.class_id), "teacher_id": str(e.teacher_id)} for e in rows]

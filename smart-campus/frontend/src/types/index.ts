@@ -11,7 +11,7 @@ export interface User {
 
 export interface Profile {
   user: User;
-  teacher?: { id: string; employee_id: string; department?: string | null } | null;
+  teacher?: { id: string; employee_id: string; department_id: string; department_name?: string | null; subject: string } | null;
   student?: { id: string; admission_number: string } | null;
 }
 
@@ -55,7 +55,8 @@ export interface Enrolment {
 
 export interface Teacher {
   id: string; user_id: string; employee_id: string; full_name: string; email: string;
-  phone?: string | null; department?: string | null; designation: string;
+  phone?: string | null; department_id: string; department_name?: string | null;
+  subject: string; designation: string;
   joining_date: string; employment_status: string;
 }
 
@@ -64,13 +65,13 @@ export interface Program { id: string; code: string; name: string; description?:
 export interface ClassLevel { id: string; program_id: string; name: string; year: number; }
 export interface Section { id: string; class_level_id: string; name: string; capacity: number; }
 export interface Subject { id: string; program_id: string; code: string; name: string; theory_marks: number; practical_marks: number; }
-export interface Classroom { id: string; room_number: string; building?: string | null; capacity: number; is_active: boolean; }
+export interface Department { id: string; name: string; }
 
 export interface TimetableEntry {
   id: string; day_of_week: string; start_time: string; end_time: string;
   subject_id: string; teacher_id: string; class_id: string; section_id?: string | null;
-  classroom_id?: string | null; is_cancelled: boolean;
-  subject_name?: string; teacher_name?: string; classroom_number?: string;
+  is_cancelled: boolean;
+  subject_name?: string; teacher_name?: string;
 }
 
 export interface AttendanceRecord {

@@ -7,6 +7,7 @@ import { DataTable, type Column } from "@/components/tables/DataTable";
 import { Select } from "@/components/forms";
 import { useDebounce } from "@/hooks/useDebounce";
 import { http } from "@/lib/api";
+import { useDepartments } from "@/features/academicQueries";
 import type { Page, Teacher, Subject } from "@/types";
 import { formatDate } from "@/lib/utils";
 
@@ -15,6 +16,7 @@ const STATUS_OPTS = ["active", "inactive", "on_leave"];
 export function TeacherListPage() {
   const navigate = useNavigate();
   const [q, setQ] = useState("");
+  const [departmentId, setDepartmentId] = useState("");
   const [subjectId, setSubjectId] = useState("");
   const [status, setStatus] = useState("");
   const [sortKey, setSortKey] = useState("created_at");
@@ -22,20 +24,22 @@ export function TeacherListPage() {
   const [page, setPage] = useState(1);
   const debounced = useDebounce(q, 300);
 
+  const departments = useDepartments();
   const subjects = useQuery({ queryKey: ["subjects"], queryFn: () => http.get<Subject[]>("/subjects") });
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ["teachers", { q: debounced, subject_id: subjectId, status, sort: sortKey, order: sortDir, page }],
+    queryKey: ["teachers", { q: debounced, department_id: departmentId, subject_id: subjectId, status, sort: sortKey, order: sortDir, page }],
     queryFn: () => http.get<Page<Teacher>>("/teachers", {
       q: debounced || undefined,
+      department_id: departmentId || undefined,
       subject_id: subjectId || undefined, status: status || undefined,
       sort: sortKey, order: sortDir, page, page_size: 20,
     }),
     placeholderData: (prev) => prev,
   });
 
-  const hasFilters = !!(subjectId || status || q);
-  const clearFilters = () => { setQ(""); setSubjectId(""); setStatus(""); setPage(1); };
+  const hasFilters = !!(departmentId || subjectId || status || q);
+  const clearFilters = () => { setQ(""); setDepartmentId(""); setSubjectId(""); setStatus(""); setPage(1); };
 
   const onSort = (key: string) => {
     const backendKey = key === "full_name" ? "full_name" : "created_at";
@@ -51,7 +55,8 @@ export function TeacherListPage() {
         <p className="text-[11px] text-slate-muted truncate">{t.email}</p>
       </div>
     ) },
-    { key: "department", header: "Department", render: (t) => <span className="text-slate-muted">{t.department || "—"}</span> },
+    { key: "department_name", header: "Department", render: (t) => <span className="text-slate-muted">{t.department_name || "—"}</span> },
+    { key: "subject", header: "Subject", render: (t) => <span className="text-slate-muted truncate block max-w-[180px]">{t.subject || "—"}</span> },
     { key: "joining_date", header: "Joined", render: (t) => formatDate(t.joining_date) },
     { key: "employment_status", header: "Status", render: (t) => <Badge status={t.employment_status}>{t.employment_status}</Badge> },
   ];
@@ -60,7 +65,7 @@ export function TeacherListPage() {
     <div>
       <PageHeader
         title="Teacher Logs"
-        description="Search and inspect teachers by name, employee ID, subject and status."
+        description="Search and inspect teachers by name, employee ID, department, subject and status."
         action={<button onClick={() => navigate("/teachers/new")} className="btn-primary"><Plus size={16} /> Add Teacher</button>}
       />
 
@@ -70,6 +75,10 @@ export function TeacherListPage() {
           <input className="input pl-9" placeholder="Search by name, email or employee ID…" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} />
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          <Select value={departmentId} onChange={(e) => { setDepartmentId(e.target.value); setPage(1); }}>
+            <option value="">All departments</option>
+            {departments.data?.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+          </Select>
           <Select value={subjectId} onChange={(e) => { setSubjectId(e.target.value); setPage(1); }}>
             <option value="">All subjects</option>
             {subjects.data?.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}

@@ -4,7 +4,7 @@ All primary keys are UUID v4 strings (String(36)) for portability between
 PostgreSQL and the test database. Timestamps are timezone-aware UTC.
 """
 from app.database.base import Base, TimestampMixin, UUIDPK
-from app.models.academic import AcademicSession, Classroom, ClassLevel, Program, Section, Subject
+from app.models.academic import AcademicSession, ClassLevel, Department, Program, Section, Subject
 from app.models.assignments import TeacherAssignment
 from app.models.attendance import (
     AttendanceRecord,
@@ -45,7 +45,7 @@ __all__ = [
     "ClassLevel",
     "Section",
     "Subject",
-    "Classroom",
+    "Department",
     "Teacher",
     "Guardian",
     "Student",

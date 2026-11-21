@@ -19,7 +19,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.core.config import settings
 from app.database.session import AsyncSessionLocal, engine
-from app.models.academic import AcademicSession, ClassLevel, Classroom, Program, Section, Subject
+from app.models.academic import AcademicSession, ClassLevel, Department, Program, Section, Subject
 from app.models.assignments import TeacherAssignment
 from app.models.attendance import AttendanceRecord, TeacherAttendance
 from app.models.examinations import Examination, GradingBoundary, GradingPolicy, StudentMark
@@ -294,11 +294,15 @@ async def seed_demo_data() -> None:
             prog_phy = await _get_or_create(db, Subject, [Subject.program_id == ics.id, Subject.code == "PHY"],
                                             program_id=ics.id, code="PHY", name="Physics")
 
-            # Classrooms
-            r101 = await _get_or_create(db, Classroom, [Classroom.room_number == "101"],
-                                        room_number="101", building="Main", capacity=40)
-            r102 = await _get_or_create(db, Classroom, [Classroom.room_number == "102"],
-                                        room_number="102", building="Main", capacity=40)
+            # Departments — the five fixed rows. Migration 0006 also seeds these
+            # (with reproducible UUIDs); here we ensure they exist regardless of
+            # how the DB was initialized (e.g. create_all on a fresh test DB).
+            cs_dept = None
+            for _dname in ("Literature", "Computer Science", "Biology",
+                           "Mathematics/Statistics", "Physical Sciences"):
+                d = await _get_or_create(db, Department, [Department.name == _dname], name=_dname)
+                if _dname == "Computer Science":
+                    cs_dept = d
 
             # Teacher
             teacher_user = await _get_or_create(
@@ -311,7 +315,8 @@ async def seed_demo_data() -> None:
                 db, Teacher, [Teacher.email == "teacher.sarah@smartcampus.edu"],
                 user_id=teacher_user.id, employee_id="EMP-001",
                 full_name="Sarah Khan", email="teacher.sarah@smartcampus.edu",
-                phone="+923000000001", department="Computer Science",
+                phone="+923000000001", department_id=cs_dept.id,
+                subject="Programming Fundamentals",
                 designation="Senior Lecturer", joining_date=date(2022, 9, 1),
                 employment_status="active",
             )
@@ -377,8 +382,8 @@ async def seed_demo_data() -> None:
             # Timetable entries
             tt_entries = []
             for day in ("monday", "tuesday", "wednesday"):
-                for subj, room, start, end in [(prog_cs, r101, time(8, 30), time(9, 30)),
-                                               (prog_math, r102, time(9, 30), time(10, 30))]:
+                for subj, start, end in [(prog_cs, time(8, 30), time(9, 30)),
+                                         (prog_math, time(9, 30), time(10, 30))]:
                     entry = await _get_or_create(
                         db, TimetableEntry,
                         [TimetableEntry.teacher_id == teacher.id,
@@ -389,7 +394,7 @@ async def seed_demo_data() -> None:
                         academic_session_id=session.id, day_of_week=day,
                         start_time=start, end_time=end, subject_id=subj.id,
                         teacher_id=teacher.id, class_id=ics_p1.id, section_id=ics_p1_a.id,
-                        classroom_id=room.id, is_cancelled=False,
+                        is_cancelled=False,
                     )
                     tt_entries.append(entry)
 

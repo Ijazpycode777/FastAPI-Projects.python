@@ -79,7 +79,13 @@ def _profile(user: User) -> ProfileOut:
     student = None
     if user.teacher_profile is not None:
         t = user.teacher_profile
-        teacher = {"id": str(t.id), "employee_id": t.employee_id, "department": t.department}
+        teacher = {
+            "id": str(t.id),
+            "employee_id": t.employee_id,
+            "department_id": str(t.department_id),
+            "department_name": t.department_name,
+            "subject": t.subject,
+        }
     if user.student_profile is not None:
         s = user.student_profile
         student = {"id": str(s.id), "admission_number": s.admission_number}

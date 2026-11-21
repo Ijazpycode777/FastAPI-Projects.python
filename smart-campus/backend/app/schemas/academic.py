@@ -87,19 +87,11 @@ class SubjectOut(ORMBase):
     practical_marks: int
 
 
-class ClassroomIn(BaseModel):
-    room_number: str = Field(min_length=1, max_length=24)
-    building: str | None = None
-    capacity: int = Field(default=40, ge=1, le=1000)
-    is_active: bool = True
-
-
-class ClassroomOut(ORMBase):
+class DepartmentOut(ORMBase):
+    """Read-only department record. The five fixed rows are migration-seeded;
+    there is no create/update/delete schema by design."""
     id: str
-    room_number: str
-    building: str | None = None
-    capacity: int
-    is_active: bool
+    name: str
 
 
 class AssignmentIn(BaseModel):

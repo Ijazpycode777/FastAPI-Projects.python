@@ -40,7 +40,6 @@ class TimetableEntryIn(BaseModel):
     teacher_id: str
     class_id: str
     section_id: str | None = None
-    classroom_id: str | None = None
     period_name: str | None = None
 
     @model_validator(mode="after")
@@ -60,7 +59,6 @@ class TimetableEntryOut(ORMBase):
     teacher_id: str
     class_id: str
     section_id: str | None = None
-    classroom_id: str | None = None
     period_name: str | None = None
     is_cancelled: bool
 
@@ -73,11 +71,9 @@ class TimetableEntryUpdateIn(BaseModel):
     teacher_id: str | None = None
     class_id: str | None = None
     section_id: str | None = None
-    classroom_id: str | None = None
     period_name: str | None = None
 
 
 class TimetableEntryDetailOut(TimetableEntryOut):
     subject_name: str | None = None
     teacher_name: str | None = None
-    classroom_number: str | None = None

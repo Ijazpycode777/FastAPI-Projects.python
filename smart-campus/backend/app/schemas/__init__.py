@@ -1,8 +1,7 @@
 from app.schemas.academic import (
     AcademicSessionIn,
     AcademicSessionOut,
-    ClassroomIn,
-    ClassroomOut,
+    DepartmentOut,
     ClassLevelIn,
     ClassLevelOut,
     ProgramIn,

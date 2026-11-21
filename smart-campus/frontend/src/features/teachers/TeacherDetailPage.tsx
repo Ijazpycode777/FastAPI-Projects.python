@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, CalendarOff, CalendarDays } from "lucide-react";
+import { ArrowLeft, CalendarOff, CalendarDays, Pencil } from "lucide-react";
 import { PageHeader, Card, CardHeader, Badge, ErrorState, Skeleton } from "@/components/common";
 import { LeaveFormModal, LeaveHistory } from "@/features/leave";
 import { http } from "@/lib/api";
@@ -36,6 +36,7 @@ export function TeacherDetailPage() {
         description={`${teacher.employee_id} · ${teacher.email}`}
         action={<>
           <button onClick={() => navigate(-1)} className="btn-secondary"><ArrowLeft size={16} /> Back</button>
+          <button onClick={() => navigate(`/teachers/${teacher.id}/edit`)} className="btn-primary"><Pencil size={16} /> Edit</button>
           <button onClick={() => navigate("/timetable")} className="btn-secondary"><CalendarDays size={16} /> Timetable</button>
           <button onClick={() => setLeaveOpen(true)} className="btn-secondary"><CalendarOff size={16} /> Submit leave</button>
         </>}
@@ -48,7 +49,8 @@ export function TeacherDetailPage() {
             <Row label="Employee ID" value={teacher.employee_id} />
             <Row label="Email" value={teacher.email} />
             <Row label="Phone" value={teacher.phone || "—"} />
-            <Row label="Department" value={teacher.department || "—"} />
+            <Row label="Department" value={teacher.department_name || "—"} />
+            <Row label="Subject" value={teacher.subject || "—"} />
             <Row label="Designation" value={teacher.designation} />
             <Row label="Joined" value={formatDate(teacher.joining_date)} />
             <div className="flex items-center justify-between">

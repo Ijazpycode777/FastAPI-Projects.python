@@ -32,18 +32,38 @@ class TeacherCreateIn(BaseModel):
     email: EmailStr
     phone: str | None = None
     employee_id: str = Field(min_length=1, max_length=32)
-    department: str | None = None
+    department_id: str = Field(min_length=1)
+    subject: str = Field(min_length=1, max_length=120)
     designation: str = "Lecturer"
     joining_date: date
     password: str = Field(min_length=10, max_length=128)
+
+    @field_validator("subject")
+    @classmethod
+    def _subject_non_empty(cls, v: str) -> str:
+        cleaned = (v or "").strip()
+        if not cleaned:
+            raise ValueError("subject must contain meaningful non-whitespace text")
+        return cleaned
 
 
 class TeacherUpdateIn(BaseModel):
     full_name: str | None = None
     phone: str | None = None
-    department: str | None = None
+    department_id: str | None = None
+    subject: str | None = Field(default=None, min_length=1, max_length=120)
     designation: str | None = None
     employment_status: str | None = None
+
+    @field_validator("subject")
+    @classmethod
+    def _subject_non_empty(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        cleaned = v.strip()
+        if not cleaned:
+            raise ValueError("subject must contain meaningful non-whitespace text")
+        return cleaned
 
 
 class TeacherOut(ORMBase):
@@ -53,7 +73,9 @@ class TeacherOut(ORMBase):
     full_name: str
     email: str
     phone: str | None = None
-    department: str | None = None
+    department_id: str
+    department_name: str | None = None
+    subject: str
     designation: str
     joining_date: date
     employment_status: str

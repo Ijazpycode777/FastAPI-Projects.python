@@ -21,7 +21,7 @@ router = APIRouter(prefix="/teachers", tags=["teachers"])
 @router.get("", response_model=Page[TeacherOut])
 async def list_teachers(
     q: str | None = Query(None),
-    department: str | None = Query(None),
+    department_id: str | None = Query(None),
     subject_id: str | None = Query(None),
     status: str | None = Query(None),
     sort: str = Query("created_at", pattern="^(full_name|created_at)$"),
@@ -35,8 +35,8 @@ async def list_teachers(
     if q:
         like = f"%{q.lower()}%"
         stmt = stmt.where(or_(Teacher.full_name.ilike(like), Teacher.email.ilike(like), Teacher.employee_id.ilike(like)))
-    if department:
-        stmt = stmt.where(Teacher.department == department)
+    if department_id:
+        stmt = stmt.where(Teacher.department_id == department_id)
     if status:
         stmt = stmt.where(Teacher.employment_status == status)
     if subject_id:
@@ -46,6 +46,8 @@ async def list_teachers(
     sort_col = {"full_name": Teacher.full_name, "created_at": Teacher.created_at}[sort]
     stmt = stmt.order_by(sort_col.desc() if order == "desc" else sort_col.asc())
     rows = (await db.execute(stmt.offset((page - 1) * page_size).limit(page_size))).scalars().all()
+    # Teacher.department is lazy="selectin", so department_name (a model
+    # property) is populated for every row without an explicit selectinload.
     return paginate([TeacherOut.model_validate(r) for r in rows], page, page_size, int(total or 0))
 
 

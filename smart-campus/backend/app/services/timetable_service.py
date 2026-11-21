@@ -49,7 +49,7 @@ async def create_entry(db: AsyncSession, actor, data: dict[str, Any]) -> Timetab
 
     # Serialize conflict detection for this (teacher, day) so two concurrent
     # create_entry calls cannot both read an empty conflict set and insert
-    # overlapping entries (double-booking a teacher or classroom). The advisory
+    # overlapping entries (double-booking a teacher or class). The advisory
     # lock is held until commit; the candidate rows are also locked (FOR UPDATE)
     # on Postgres as a second line of defense.
     await pg_advisory_xact_lock(
@@ -66,7 +66,7 @@ async def create_entry(db: AsyncSession, actor, data: dict[str, Any]) -> Timetab
         EntryRef(
             id=str(e.id), day_of_week=e.day_of_week,
             start_time=e.start_time, end_time=e.end_time,
-            teacher_id=str(e.teacher_id), classroom_id=str(e.classroom_id) if e.classroom_id else None,
+            teacher_id=str(e.teacher_id),
             class_id=str(e.class_id), section_id=str(e.section_id) if e.section_id else None,
         )
         for e in candidates.scalars().all()
@@ -75,7 +75,6 @@ async def create_entry(db: AsyncSession, actor, data: dict[str, Any]) -> Timetab
         id="new", day_of_week=data["day_of_week"],
         start_time=data["start_time"], end_time=data["end_time"],
         teacher_id=data["teacher_id"],
-        classroom_id=data.get("classroom_id"),
         class_id=data["class_id"], section_id=data.get("section_id"),
     )
     conflict = find_conflict(new_ref, existing)
@@ -105,7 +104,7 @@ async def cancel_entry(db: AsyncSession, actor, entry: TimetableEntry) -> Timeta
 async def update_entry(db: AsyncSession, actor, entry: TimetableEntry, data: dict[str, Any]) -> TimetableEntry:
     """Update a scheduled lecture and re-run conflict validation (excluding self)."""
     for k in ("day_of_week", "start_time", "end_time", "subject_id", "teacher_id",
-              "class_id", "section_id", "classroom_id", "period_name"):
+              "class_id", "section_id", "period_name"):
         if data.get(k) is not None:
             setattr(entry, k, data[k])
     if entry.end_time <= entry.start_time:
@@ -122,7 +121,7 @@ async def update_entry(db: AsyncSession, actor, entry: TimetableEntry, data: dic
         EntryRef(
             id=str(e.id), day_of_week=e.day_of_week,
             start_time=e.start_time, end_time=e.end_time,
-            teacher_id=str(e.teacher_id), classroom_id=str(e.classroom_id) if e.classroom_id else None,
+            teacher_id=str(e.teacher_id),
             class_id=str(e.class_id), section_id=str(e.section_id) if e.section_id else None,
         )
         for e in candidates.scalars().all()
@@ -131,7 +130,6 @@ async def update_entry(db: AsyncSession, actor, entry: TimetableEntry, data: dic
         id=str(entry.id), day_of_week=entry.day_of_week,
         start_time=entry.start_time, end_time=entry.end_time,
         teacher_id=str(entry.teacher_id),
-        classroom_id=str(entry.classroom_id) if entry.classroom_id else None,
         class_id=str(entry.class_id), section_id=str(entry.section_id) if entry.section_id else None,
     )
     conflict = find_conflict(new_ref, existing)

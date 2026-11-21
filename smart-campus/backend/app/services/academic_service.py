@@ -1,4 +1,4 @@
-"""Academic structure service: sessions, programs, classes, sections, subjects, classrooms.
+"""Academic structure service: sessions, programs, classes, sections, subjects.
 
 Also teacher assignments (which teacher teaches what to whom) — the
 authoritative source for teacher-side authorization.
@@ -14,7 +14,6 @@ from app.core.exceptions import ConflictError, NotFoundError
 from app.models.academic import (
     AcademicSession,
     ClassLevel,
-    Classroom,
     Program,
     Section,
     Subject,
@@ -42,7 +41,6 @@ async def create_program(db, actor, **kw): return await _create(db, actor, Progr
 async def create_class(db, actor, **kw): return await _create(db, actor, ClassLevel, "class.create", **kw)
 async def create_section(db, actor, **kw): return await _create(db, actor, Section, "section.create", **kw)
 async def create_subject(db, actor, **kw): return await _create(db, actor, Subject, "subject.create", **kw)
-async def create_classroom(db, actor, **kw): return await _create(db, actor, Classroom, "classroom.create", **kw)
 
 
 async def assign_teacher(

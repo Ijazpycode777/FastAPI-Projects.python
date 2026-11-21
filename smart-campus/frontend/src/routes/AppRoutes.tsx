@@ -87,6 +87,7 @@ export function AppRoutes() {
           <Route path="teachers" element={<Protected roles={["admin"]}><TeacherListPage /></Protected>} />
           <Route path="teachers/new" element={<Protected roles={["admin"]}><TeacherFormPage /></Protected>} />
           <Route path="teachers/:id" element={<Protected roles={["admin"]}><TeacherDetailPage /></Protected>} />
+          <Route path="teachers/:id/edit" element={<Protected roles={["admin"]}><TeacherFormPage /></Protected>} />
 
           {/* Attendance */}
           <Route path="attendance/mark" element={<Protected roles={["teacher"]}><AttendanceMarkingPage /></Protected>} />

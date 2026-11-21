@@ -1,6 +1,9 @@
-"""Academic structure: sessions, programs, classes/parts, sections, subjects, classrooms.
+"""Academic structure: sessions, programs, classes/parts, sections, subjects, departments.
 
 Hierarchy: College → AcademicSession → Program → ClassLevel → Section → Subject.
+Departments are a fixed, migration-seeded set of five rows that every teacher
+references via a foreign key. They are not creatable, renamable or deletable
+through the application — only listed read-only.
 """
 from __future__ import annotations
 
@@ -90,12 +93,18 @@ class Subject(UUIDPK, TimestampMixin, Base):
     program = relationship("Program", back_populates="subjects")
 
 
-class Classroom(UUIDPK, TimestampMixin, Base):
-    """A physical room."""
-    __tablename__ = "classrooms"
-    __table_args__ = (UniqueConstraint("room_number", name="uq_classrooms_room_number"),)
+class Department(UUIDPK, TimestampMixin, Base):
+    """A fixed teacher department.
 
-    room_number: Mapped[str] = mapped_column(String(24), nullable=False)
-    building: Mapped[str | None] = mapped_column(String(80), nullable=True)
-    capacity: Mapped[int] = mapped_column(Integer, nullable=False, default=40)
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    Exactly five rows, seeded by migration 0006 (Literature, Computer Science,
+    Biology, Mathematics/Statistics, Physical Sciences). Every teacher
+    references exactly one department via ``department_id``.
+
+    There is intentionally no create/rename/delete endpoint — the set is fixed
+    by the migration and must not be mutated through application operations.
+    Only a read-only ``GET /departments`` list is exposed.
+    """
+    __tablename__ = "departments"
+    __table_args__ = (UniqueConstraint("name", name="uq_departments_name"),)
+
+    name: Mapped[str] = mapped_column(String(80), nullable=False)

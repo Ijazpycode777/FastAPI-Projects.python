@@ -104,7 +104,6 @@ async def test_breakdown_counts_present_absent_leave(admin_client, client, acade
         "start_time": "08:30", "end_time": "09:30",
         "subject_id": academic_setup["subject_id"], "teacher_id": teacher["id"],
         "class_id": academic_setup["class_id"], "section_id": academic_setup["section_id"],
-        "classroom_id": academic_setup["classroom_id"],
     })
     assert resp.status_code == 200, resp.text
     entry = resp.json()

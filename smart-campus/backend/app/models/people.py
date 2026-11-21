@@ -23,16 +23,30 @@ class Teacher(UUIDPK, TimestampMixin, Base):
     full_name: Mapped[str] = mapped_column(String(160), nullable=False)
     email: Mapped[str] = mapped_column(String(255), nullable=False)
     phone: Mapped[str | None] = mapped_column(String(40), nullable=True)
-    department: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    # Exactly one fixed department (FK to the migration-seeded five rows).
+    department_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("departments.id", ondelete="RESTRICT"), nullable=False
+    )
+    # Exactly one manually entered subject (free text — no catalogue, no
+    # department→subject mapping, no compatibility checks).
+    subject: Mapped[str] = mapped_column(String(120), nullable=False)
     designation: Mapped[str] = mapped_column(String(80), nullable=False, default="Lecturer")
     joining_date: Mapped[date] = mapped_column(Date, nullable=False)
     employment_status: Mapped[str] = mapped_column(String(24), nullable=False, default="active")
 
     user = relationship("User", back_populates="teacher_profile")
+    # Eager-loaded so ``teacher.department.name`` is safe under async without an
+    # explicit selectinload at every call site (departments is a tiny fixed set).
+    department = relationship("Department", lazy="selectin")
     assignments = relationship("TeacherAssignment", back_populates="teacher", cascade="all, delete-orphan")
     attendance = relationship("AttendanceRecord", back_populates="teacher", foreign_keys="AttendanceRecord.teacher_id")
     self_attendance = relationship("TeacherAttendance", back_populates="teacher", cascade="all, delete-orphan")
     timetable_entries = relationship("TimetableEntry", back_populates="teacher")
+
+    @property
+    def department_name(self) -> str | None:
+        """Resolved department name for API serialization (TeacherOut)."""
+        return self.department.name if self.department is not None else None
 
 
 class Guardian(UUIDPK, TimestampMixin, Base):
