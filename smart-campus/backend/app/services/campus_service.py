@@ -28,14 +28,22 @@ async def create_shift(db: AsyncSession, actor, data: dict[str, Any]) -> CampusS
         is_active=data.get("is_active", True),
     )
     db.add(rec)
-    await db.flush()
+    # Commit the business object FIRST, then write the audit. This decouples the
+    # shift creation from the audit log: the audit is a non-critical, append-only
+    # record and must never block or poison the business operation. Writing it
+    # after the shift is persisted means even a catastrophic audit failure
+    # (missing/stale table, constraint error, or a SAVEPOINT/driver quirk under
+    # asyncpg) cannot roll back or abort the already-committed shift — the user
+    # sees success and the failure is only in the logs. record_audit itself also
+    # isolates its insert inside a SAVEPOINT and never propagates exceptions.
+    await db.commit()
+    await db.refresh(rec)
     await record_audit(
         db, actor_id=actor.id, actor_role=actor.role,
         action="shift.create", resource_type="campus_shift", resource_id=rec.id,
         after={"name": rec.name, "code": rec.code},
     )
-    await db.commit()
-    await db.refresh(rec)
+    await db.commit()  # commits the audit row (no-op if the audit SAVEPOINT rolled back)
     return rec
 
 
@@ -44,13 +52,15 @@ async def update_shift(db: AsyncSession, actor, rec: CampusShift, data: dict[str
     for k in ("name", "code", "start_time", "end_time", "is_active"):
         if data.get(k) is not None:
             setattr(rec, k, data[k])
+    # Persist the change first; audit afterwards (best-effort, never blocks).
+    await db.commit()
+    await db.refresh(rec)
     await record_audit(
         db, actor_id=actor.id, actor_role=actor.role,
         action="shift.update", resource_type="campus_shift", resource_id=rec.id,
         before=before, after={"name": rec.name, "code": rec.code, "is_active": rec.is_active},
     )
     await db.commit()
-    await db.refresh(rec)
     return rec
 
 
@@ -88,14 +98,15 @@ async def create_scheme(db: AsyncSession, actor, data: dict[str, Any]) -> RollNu
         min_roll=data["min_roll"], max_roll=data["max_roll"], padding=data.get("padding", 2),
     )
     db.add(rec)
-    await db.flush()
+    # Persist first; audit afterwards (best-effort, never blocks the create).
+    await db.commit()
+    await db.refresh(rec)
     await record_audit(
         db, actor_id=actor.id, actor_role=actor.role,
         action="roll_scheme.create", resource_type="roll_number_scheme", resource_id=rec.id,
         after={"class_id": rec.class_id, "min": rec.min_roll, "max": rec.max_roll},
     )
     await db.commit()
-    await db.refresh(rec)
     return rec
 
 
@@ -105,12 +116,13 @@ async def update_scheme(db: AsyncSession, actor, rec: RollNumberScheme, data: di
             setattr(rec, k, data[k])
     if rec.max_roll < rec.min_roll:
         raise ValidationError("max_roll must be >= min_roll.")
+    await db.commit()
+    await db.refresh(rec)
     await record_audit(
         db, actor_id=actor.id, actor_role=actor.role,
         action="roll_scheme.update", resource_type="roll_number_scheme", resource_id=rec.id,
     )
     await db.commit()
-    await db.refresh(rec)
     return rec
 
 

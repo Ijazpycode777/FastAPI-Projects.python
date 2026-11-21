@@ -24,6 +24,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.core.config import settings
+
 log = logging.getLogger("smartcampus.errors")
 
 # Stable error codes used across the API.
@@ -136,10 +138,18 @@ def add_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(Exception)
     async def _unhandled(request: Request, exc: Exception) -> JSONResponse:
         log.exception("Unhandled server error: %s", exc)
+        # In production the client sees only a generic message (no internal
+        # detail leaks). In development/staging the exception type + message are
+        # surfaced so the failure is diagnosable from the UI instead of an
+        # opaque "unexpected error" (the full traceback is always in the logs).
+        if settings.app_env == "production":
+            message = "An unexpected error occurred. Please try again later."
+        else:
+            message = f"Server error: {type(exc).__name__}: {exc}"
         return JSONResponse(
             status_code=500,
             content=jsonable_encoder(
-                _envelope("INTERNAL_ERROR", "An unexpected error occurred. Please try again later.", None, _request_id(request))
+                _envelope("INTERNAL_ERROR", message, None, _request_id(request))
             ),
         )
 
