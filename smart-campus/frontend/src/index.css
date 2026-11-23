@@ -11,42 +11,80 @@ html, body, #root {
 }
 
 body {
-  @apply bg-slate-bg text-ink font-sans antialiased;
+  /* Lavender canvas + a barely-there radial mesh for depth (premium SaaS feel)
+     without distracting from content. */
+  @apply bg-slate-bg bg-app-mesh text-ink font-sans antialiased;
+  background-attachment: fixed;
 }
 
-/* Custom scrollbar — subtle, premium */
-*::-webkit-scrollbar { width: 10px; height: 10px; }
+/* Refined scrollbar — thinner, rounded, indigo hover. */
+*::-webkit-scrollbar { width: 9px; height: 9px; }
 *::-webkit-scrollbar-track { background: transparent; }
-*::-webkit-scrollbar-thumb { @apply bg-slate-border rounded-full; }
-*::-webkit-scrollbar-thumb:hover { @apply bg-slate-faint; }
+*::-webkit-scrollbar-thumb { @apply bg-slate-border rounded-full border-2 border-transparent bg-clip-padding; }
+*::-webkit-scrollbar-thumb:hover { @apply bg-indigo/40; }
 
 ::selection { @apply bg-indigo/20 text-ink; }
 
 @layer components {
+  /* ---- Buttons: refined with lift + press micro-interactions. ---- */
   .btn {
     @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold
-           transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo/40
-           disabled:opacity-50 disabled:cursor-not-allowed;
+           transition-all duration-200 ease-out
+           focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo/40 focus-visible:ring-offset-2 focus-visible:ring-offset-white
+           active:scale-[0.97]
+           disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100;
   }
-  .btn-primary { @apply btn text-white shadow-glow bg-gradient-to-r from-indigo to-violet hover:from-indigo-dark hover:to-violet-soft; }
-  .btn-secondary { @apply btn bg-white text-ink border border-slate-border hover:bg-slate-bg hover:border-slate-faint; }
-  .btn-danger { @apply btn bg-rose text-white hover:bg-rose/90; }
-  .btn-ghost { @apply btn text-slate-muted hover:bg-slate-bg hover:text-ink; }
+  .btn-primary {
+    @apply btn text-white shadow-glow bg-gradient-to-r from-indigo to-violet
+           hover:from-indigo-dark hover:to-violet-soft hover:-translate-y-0.5 hover:shadow-pop
+           active:translate-y-0;
+  }
+  .btn-secondary {
+    @apply btn bg-white text-ink border border-slate-border shadow-soft
+           hover:bg-slate-bg hover:border-indigo/40 hover:-translate-y-0.5 hover:shadow-card;
+  }
+  .btn-danger {
+    @apply btn bg-rose text-white shadow-soft
+           hover:bg-rose-soft hover:-translate-y-0.5 active:translate-y-0;
+  }
+  .btn-ghost {
+    @apply btn text-slate-muted hover:bg-indigo/10 hover:text-indigo;
+  }
 
-  .card { @apply bg-slate-card rounded-2xl shadow-card border border-slate-border; }
-  .card-hover { @apply transition-all duration-200 hover:-translate-y-0.5 hover:shadow-pop; }
+  /* ---- Cards: refined hairline + subtle top-accent on hover. ---- */
+  .card { @apply bg-slate-card rounded-2xl shadow-card border border-slate-border relative; }
+  .card-hover {
+    @apply transition-all duration-300 ease-out
+           hover:-translate-y-1 hover:shadow-pop hover:border-indigo/25;
+  }
+
+  /* ---- Inputs: refined focus glow + smooth transition. ---- */
   .input {
-    @apply w-full rounded-xl border border-slate-border bg-white px-3 py-2 text-sm text-ink
-           placeholder:text-slate-faint/70 transition-colors
-           focus:outline-none focus:ring-2 focus:ring-indigo/25 focus:border-indigo;
+    @apply w-full rounded-xl border border-slate-border bg-white px-3.5 py-2.5 text-sm text-ink
+           placeholder:text-slate-faint/70 shadow-soft transition-all duration-200
+           focus:outline-none focus:ring-4 focus:ring-indigo/10 focus:border-indigo focus:shadow-ring;
   }
   .label { @apply block text-sm font-medium text-ink mb-1.5; }
   .badge { @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold; }
-  .stat-card { @apply card p-5 flex flex-col gap-2 animate-slideUp; }
+  .stat-card { @apply card p-5 flex flex-col gap-2 animate-slideUp overflow-hidden; }
 
   /* Premium gradient hero surface for dashboard welcome banners. */
   .hero-gradient {
     background-image: linear-gradient(120deg, #21145B 0%, #301078 45%, #6041C8 100%);
+  }
+
+  /* ---- Shimmer skeleton: gradient sweep, more refined than a plain pulse. ----
+     Layered: a muted base + an animated highlight band sweeping left→right. */
+  .shimmer {
+    @apply relative overflow-hidden rounded-xl bg-slate-border/60;
+  }
+  .shimmer::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image: theme("backgroundImage.shimmer");
+    background-size: 200% 100%;
+    animation: shimmer 1.8s linear infinite;
   }
 }
 

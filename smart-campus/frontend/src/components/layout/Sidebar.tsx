@@ -27,7 +27,7 @@ export function Sidebar({ role, open, onClose }: SidebarProps) {
       aria-label="Primary navigation"
     >
       <div className="flex h-16 items-center gap-2.5 px-5 border-b border-white/10">
-        <div className="h-9 w-9 rounded-xl grid place-items-center shadow-glow bg-gradient-to-br from-indigo to-violet">
+        <div className="h-9 w-9 rounded-xl grid place-items-center shadow-glow bg-gradient-to-br from-indigo to-violet ring-1 ring-white/20">
           <GraduationCap size={20} className="text-white" />
         </div>
         <div className="leading-tight">
@@ -51,15 +51,17 @@ export function Sidebar({ role, open, onClose }: SidebarProps) {
                   onClick={onClose}
                   className={({ isActive }) =>
                     cn(
-                      "group flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] font-medium transition-all",
+                      "group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] font-medium transition-all duration-200",
                       isActive
                         ? "bg-gradient-to-r from-indigo to-violet text-white shadow-glow"
-                        : "text-white/55 hover:bg-white/5 hover:text-white"
+                        : "text-white/55 hover:bg-white/5 hover:text-white hover:translate-x-0.5"
                     )
                   }
                 >
                   {({ isActive }) => (
                     <>
+                      {/* Active accent bar — a refined left indicator. */}
+                      {isActive && <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-1 rounded-full bg-white/90" />}
                       <item.icon size={18} className={cn("shrink-0 transition-colors", isActive ? "text-white" : "text-white/45 group-hover:text-white")} />
                       <span className="truncate">{item.label}</span>
                     </>

@@ -43,18 +43,43 @@ export default {
         card: "0 1px 2px rgba(33,20,91,0.04), 0 8px 24px rgba(33,20,91,0.06)",
         pop: "0 12px 32px -8px rgba(33,20,91,0.18), 0 8px 16px -10px rgba(33,20,91,0.10)",
         glow: "0 8px 24px -6px rgba(96,65,200,0.45)",
+        // Refined additions — barely-there inner highlight + soft resting lift.
+        soft: "0 1px 2px rgba(33,20,91,0.05), 0 4px 12px rgba(33,20,91,0.04)",
+        inner: "inset 0 1px 0 0 rgba(255,255,255,0.6)",
+        ring: "0 0 0 4px rgba(96,65,200,0.12)",
       },
       borderRadius: { xl: "1rem", "2xl": "1.25rem", "3xl": "1.5rem" },
       backgroundImage: {
         "brand-gradient": "linear-gradient(135deg, #21145B 0%, #301078 50%, #6041C8 100%)",
         "brand-gradient-soft": "linear-gradient(135deg, #6041C8 0%, #301078 100%)",
         "navy-gradient": "linear-gradient(180deg, #21145B 0%, #1A0F47 100%)",
+        // Barely-there app-canvas mesh — adds depth without distracting from content.
+        "app-mesh":
+          "radial-gradient(60rem 60rem at 100% -10%, rgba(96,65,200,0.06), transparent 60%)," +
+          "radial-gradient(50rem 50rem at -10% 110%, rgba(24,168,121,0.05), transparent 55%)",
+        // Shimmer sweep for refined skeleton loaders.
+        "shimmer":
+          "linear-gradient(90deg, rgba(232,232,240,0) 0%, rgba(255,255,255,0.65) 50%, rgba(232,232,240,0) 100%)",
       },
       keyframes: {
         fadeIn: { from: { opacity: "0" }, to: { opacity: "1" } },
         slideUp: { from: { opacity: "0", transform: "translateY(6px)" }, to: { opacity: "1", transform: "translateY(0)" } },
+        // Gradient sweep across a skeleton block — repeats.
+        shimmer: { "0%": { backgroundPosition: "-200% 0" }, "100%": { backgroundPosition: "200% 0" } },
+        // Gentle float for decorative hero orbs.
+        float: { "0%,100%": { transform: "translateY(0)" }, "50%": { transform: "translateY(-8px)" } },
+        // Soft pulsing ring for the notification dot.
+        pulseRing: { "0%": { transform: "scale(0.9)", opacity: "0.7" }, "70%": { transform: "scale(2.2)", opacity: "0" }, "100%": { transform: "scale(2.2)", opacity: "0" } },
+        scaleIn: { from: { opacity: "0", transform: "scale(0.96)" }, to: { opacity: "1", transform: "scale(1)" } },
       },
-      animation: { fadeIn: "fadeIn 150ms ease-out", slideUp: "slideUp 200ms ease-out" },
+      animation: {
+        fadeIn: "fadeIn 150ms ease-out",
+        slideUp: "slideUp 200ms ease-out",
+        shimmer: "shimmer 1.8s linear infinite",
+        float: "float 7s ease-in-out infinite",
+        pulseRing: "pulseRing 2.4s cubic-bezier(0.4,0,0.6,1) infinite",
+        scaleIn: "scaleIn 180ms cubic-bezier(0.16,1,0.3,1)",
+      },
     },
   },
   plugins: [],

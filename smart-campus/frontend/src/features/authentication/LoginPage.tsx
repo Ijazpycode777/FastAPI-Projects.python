@@ -49,13 +49,18 @@ export function LoginPage() {
   };
 
   return (
-    <div className="min-h-full grid lg:grid-cols-2 bg-slate-bg">
+    <div className="min-h-full grid lg:grid-cols-2 bg-slate-bg bg-app-mesh">
       {/* Brand panel */}
-      <div className="hidden lg:flex flex-col justify-between bg-navy text-white p-12 relative overflow-hidden">
-        <div className="absolute -top-20 -right-20 h-72 w-72 rounded-full bg-indigo/30 blur-3xl" />
-        <div className="absolute -bottom-24 -left-10 h-72 w-72 rounded-full bg-teal/20 blur-3xl" />
+      <div className="hidden lg:flex flex-col justify-between hero-gradient text-white p-12 relative overflow-hidden">
+        <div className="absolute -top-24 -right-24 h-80 w-80 rounded-full bg-indigo/30 blur-3xl animate-float" />
+        <div className="absolute -bottom-28 -left-12 h-80 w-80 rounded-full bg-teal/20 blur-3xl animate-float [animation-delay:-3.5s]" />
+        <div className="absolute top-1/3 right-1/4 h-40 w-40 rounded-full bg-violet-soft/20 blur-2xl animate-float [animation-delay:-1.5s]" />
+        <div
+          className="absolute inset-0 opacity-[0.05]"
+          style={{ backgroundImage: "repeating-linear-gradient(135deg, #fff 0 1px, transparent 1px 16px)" }}
+        />
         <div className="relative flex items-center gap-3">
-          <div className="h-11 w-11 rounded-xl bg-indigo grid place-items-center font-bold">SC</div>
+          <div className="h-11 w-11 rounded-xl grid place-items-center font-bold shadow-glow bg-gradient-to-br from-indigo to-violet ring-1 ring-white/25">SC</div>
           <div>
             <p className="font-bold text-lg">Smart Campus</p>
             <p className="text-white/60 text-xs">College Management System</p>
@@ -67,11 +72,11 @@ export function LoginPage() {
             One platform for students, teachers and administrators — attendance, examinations,
             grading, fees, timetables, study materials and notices, all in one place.
           </p>
-          <div className="mt-8 grid grid-cols-3 gap-4">
+          <div className="mt-8 grid grid-cols-3 gap-3">
             {[["Students", "Enrolment & history"], ["Academics", "Exams & grading"], ["Finance", "Fees & receipts"]].map(([t, d]) => (
-              <div key={t} className="rounded-lg bg-white/5 border border-white/10 p-3">
+              <div key={t} className="rounded-xl bg-white/5 border border-white/10 p-3 backdrop-blur-sm transition-all duration-200 hover:bg-white/10 hover:-translate-y-0.5">
                 <p className="text-sm font-semibold">{t}</p>
-                <p className="text-[11px] text-white/50 mt-0.5">{d}</p>
+                <p className="text-[11px] text-white/50 mt-0.5 leading-snug">{d}</p>
               </div>
             ))}
           </div>
@@ -81,9 +86,9 @@ export function LoginPage() {
 
       {/* Form panel */}
       <div className="flex items-center justify-center p-6 sm:p-12">
-        <div className="w-full max-w-sm">
+        <div className="w-full max-w-sm animate-slideUp">
           <div className="lg:hidden flex items-center gap-2.5 mb-8">
-            <div className="h-10 w-10 rounded-xl bg-indigo grid place-items-center text-white"><GraduationCap size={20} /></div>
+            <div className="h-10 w-10 rounded-xl grid place-items-center text-white bg-gradient-to-br from-indigo to-violet shadow-glow"><GraduationCap size={20} /></div>
             <p className="font-bold text-ink text-lg">Smart Campus</p>
           </div>
 
@@ -91,7 +96,7 @@ export function LoginPage() {
           <p className="text-sm text-slate-muted mt-1">Enter your credentials to access your dashboard.</p>
 
           {serverError && (
-            <div className="mt-5 flex items-start gap-2 rounded-lg border border-rose/30 bg-rose/5 px-3.5 py-2.5 text-sm text-rose">
+            <div className="mt-5 flex items-start gap-2 rounded-lg border border-rose/30 bg-rose/5 px-3.5 py-2.5 text-sm text-rose animate-fadeIn">
               <AlertCircle size={16} className="mt-0.5 shrink-0" />
               <span>{serverError}</span>
             </div>
@@ -104,7 +109,7 @@ export function LoginPage() {
             <Field label="Password" required error={errors.password?.message}>
               <div className="relative">
                 <TextInput type={showPassword ? "text" : "password"} autoComplete="current-password" placeholder="••••••••" {...register("password")} />
-                <button type="button" onClick={() => setShowPassword((s) => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-muted hover:text-ink">
+                <button type="button" onClick={() => setShowPassword((s) => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-muted hover:text-indigo transition-colors">
                   {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
               </div>
@@ -114,7 +119,7 @@ export function LoginPage() {
             </button>
           </form>
 
-          <div className="mt-8 rounded-lg border border-slate-border bg-white p-4">
+          <div className="mt-8 rounded-xl border border-slate-border bg-white p-4 shadow-soft">
             <p className="text-xs font-semibold text-ink mb-2">Demo accounts</p>
             <ul className="text-xs text-slate-muted space-y-1">
               <li><span className="text-ink font-medium">Admin</span> · admin@smartcampus.edu / ChangeMe!2025</li>

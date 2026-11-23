@@ -37,20 +37,23 @@ export function PageHeader({ title, description, action }: { title: string; desc
 }
 
 export function Skeleton({ className }: { className?: string }) {
-  return <div className={cn("animate-pulse rounded-xl bg-slate-border/70", className)} />;
+  return <div className={cn("shimmer", className)} />;
 }
 
 export function EmptyState({ icon: Icon, title, description, action }: { icon?: LucideIcon; title: string; description?: string; action?: ReactNode }) {
   return (
-    <div className="flex flex-col items-center justify-center text-center py-12 px-6">
+    <div className="flex flex-col items-center justify-center text-center py-14 px-6 animate-fadeIn">
       {Icon && (
-        <div className="h-14 w-14 rounded-2xl grid place-items-center mb-3 bg-indigo/10 text-indigo">
-          <Icon size={24} />
+        <div className="relative mb-4">
+          <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-indigo/15 to-violet/10 blur-md" />
+          <div className="relative h-16 w-16 rounded-2xl grid place-items-center bg-gradient-to-br from-indigo/10 to-violet/5 text-indigo ring-1 ring-indigo/15">
+            <Icon size={26} />
+          </div>
         </div>
       )}
       <p className="font-semibold text-ink">{title}</p>
-      {description && <p className="text-sm text-slate-muted mt-1 max-w-sm">{description}</p>}
-      {action && <div className="mt-4">{action}</div>}
+      {description && <p className="text-sm text-slate-muted mt-1.5 max-w-sm leading-relaxed">{description}</p>}
+      {action && <div className="mt-5">{action}</div>}
     </div>
   );
 }
@@ -95,10 +98,10 @@ export function Modal({ open, onClose, title, children, footer }: { open: boolea
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-navy/50 backdrop-blur-sm animate-fadeIn" onClick={onClose} />
-      <div className="relative w-full max-w-lg card animate-slideUp">
+      <div className="relative w-full max-w-lg card animate-scaleIn shadow-pop">
         <div className="flex items-center justify-between border-b border-slate-hairline px-5 py-3.5">
           <h3 className="font-semibold text-[15px] text-ink">{title}</h3>
-          <button onClick={onClose} className="grid h-8 w-8 place-items-center rounded-lg text-slate-muted hover:bg-slate-bg hover:text-ink" aria-label="Close">✕</button>
+          <button onClick={onClose} className="grid h-8 w-8 place-items-center rounded-lg text-slate-muted hover:bg-slate-bg hover:text-ink transition-colors" aria-label="Close">✕</button>
         </div>
         <div className="px-5 py-4 max-h-[70vh] overflow-y-auto">{children}</div>
         {footer && <div className="flex justify-end gap-2 border-t border-slate-hairline px-5 py-3">{footer}</div>}
@@ -116,10 +119,20 @@ export function StatCard({ label, value, hint, tone = "neutral", icon: Icon }: {
     danger: "bg-rose/10 text-rose",
     neutral: "bg-slate-bg text-slate-muted",
   };
+  // Subtle top accent gradient hairline, tinted by tone — adds a refined flourish
+  // without competing with the content.
+  const accent: Record<string, string> = {
+    primary: "from-indigo/60 to-violet/0",
+    success: "from-teal/60 to-teal/0",
+    warning: "from-amber/60 to-amber/0",
+    danger: "from-rose/60 to-rose/0",
+    neutral: "from-slate-faint/60 to-slate-faint/0",
+  };
   const trendUp = hint?.trim().startsWith("+");
   const trendDown = hint?.trim().startsWith("-");
   return (
     <div className="stat-card card-hover min-w-0">
+      <div className={`absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r ${accent[tone] ?? accent.neutral}`} />
       <div className="flex items-center gap-3">
         {Icon && (
           <div className={`h-11 w-11 rounded-xl grid place-items-center shrink-0 ${tile[tone] ?? tile.neutral}`}>
@@ -144,8 +157,15 @@ export function StatCard({ label, value, hint, tone = "neutral", icon: Icon }: {
 export function HeroBanner({ title, subtitle, emoji, children }: { title: string; subtitle?: string; emoji?: string; children?: ReactNode }) {
   return (
     <div className="hero-gradient relative overflow-hidden rounded-2xl p-6 text-white shadow-glow animate-slideUp mb-6">
-      <div className="absolute -right-10 -top-10 h-36 w-36 rounded-full bg-white/10" />
-      <div className="absolute -right-4 bottom-0 h-24 w-24 rounded-full bg-white/5" />
+      {/* Decorative floating orbs — depth + a hint of motion (reduced-motion safe). */}
+      <div className="absolute -right-12 -top-12 h-44 w-44 rounded-full bg-white/10 animate-float" />
+      <div className="absolute -right-2 bottom-0 h-28 w-28 rounded-full bg-white/5 animate-float [animation-delay:-3s]" />
+      <div className="absolute right-24 -top-6 h-16 w-16 rounded-full bg-indigo-soft/30 blur-2xl" />
+      {/* Subtle diagonal hairline pattern for texture. */}
+      <div
+        className="absolute inset-0 opacity-[0.06]"
+        style={{ backgroundImage: "repeating-linear-gradient(135deg, #fff 0 1px, transparent 1px 14px)" }}
+      />
       <div className="relative">
         {subtitle && <p className="text-sm font-medium text-white/85">{subtitle}</p>}
         <h2 className="mt-1 text-2xl font-extrabold tracking-tight sm:text-[26px]">

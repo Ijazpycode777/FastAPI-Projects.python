@@ -32,9 +32,10 @@ export function Topbar({ onOpenMenu }: TopbarProps) {
       </button>
       <h2 className="text-[15px] font-semibold text-ink truncate">{pageTitle(location.pathname)}</h2>
       <div className="ml-auto flex items-center gap-3">
-        <button className="relative text-slate-muted hover:text-ink transition-colors" aria-label="Notifications">
+        <button className="relative grid h-9 w-9 place-items-center rounded-xl text-slate-muted hover:text-indigo hover:bg-indigo/10 transition-colors" aria-label="Notifications">
           <Bell size={20} />
-          <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-rose ring-2 ring-white" />
+          <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-rose ring-2 ring-white" />
+          <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-rose animate-pulseRing" />
         </button>
         <div className="flex items-center gap-2.5 pl-1">
           <div className="h-9 w-9 rounded-full grid place-items-center text-xs font-bold text-white bg-gradient-to-br from-indigo to-violet ring-2 ring-white shadow-glow">
