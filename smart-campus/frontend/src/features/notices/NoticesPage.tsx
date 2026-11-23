@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Megaphone, Plus, Pin, Trash2 } from "lucide-react";
 import { PageHeader, Card, Badge, EmptyState, ErrorState, Modal } from "@/components/common";
@@ -6,6 +6,7 @@ import { Field, TextInput, Textarea, Select } from "@/components/forms";
 import { http, ApiError } from "@/lib/api";
 import { useToast } from "@/hooks/useToast";
 import { useAuth } from "@/hooks/useAuth";
+import { useUnseenNotices } from "@/hooks/useUnseenNotices";
 import type { Notice } from "@/types";
 import { formatDateTime } from "@/lib/utils";
 
@@ -19,6 +20,14 @@ export function NoticesPage() {
   const [form, setForm] = useState({ title: "", content: "", target_audience: "all" });
 
   const { data, isLoading, isError, refetch } = useQuery({ queryKey: ["notices"], queryFn: () => http.get<Notice[]>("/notices") });
+
+  // Mark notices seen as soon as they're displayed so the bell's red dot
+  // clears — covers both the bell click and any direct navigation to /notices.
+  // The signature only changes when the set of notice IDs changes, so this
+  // does not refire on the invalidate-triggered refetch (same IDs).
+  const { markAllSeen } = useUnseenNotices();
+  const noticeSignature = data?.map((n) => n.id).join(",") ?? "";
+  useEffect(() => { if (noticeSignature) markAllSeen(); }, [noticeSignature, markAllSeen]);
 
   const publishMutation = useMutation({
     mutationFn: () => http.post<Notice>("/notices", { title: form.title, content: form.content, target_audience: form.target_audience }),

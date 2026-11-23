@@ -1,6 +1,7 @@
 import { useLocation, useNavigate } from "react-router-dom";
 import { LogOut, Menu, Bell } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { useUnseenNotices } from "@/hooks/useUnseenNotices";
 import { initials } from "@/lib/utils";
 
 interface TopbarProps {
@@ -14,15 +15,28 @@ function pageTitle(pathname: string): string {
   return segs.map((s) => s.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())).join("  /  ");
 }
 
-/** Sticky application header — polished, keeps breadcrumb + notifications + account. */
+/** Sticky application header — breadcrumb + notices bell + account.
+ *
+ * The bell opens the Notices view and is the sole entry point to it (the
+ * sidebar link was removed). The red dot appears only while there is at least
+ * one ongoing notice the current user has not yet seen, and clears the instant
+ * the bell is clicked (or the notices view is opened). */
 export function Topbar({ onOpenMenu }: TopbarProps) {
   const { profile, logout } = useAuth();
+  const { hasUnseen, markAllSeen } = useUnseenNotices();
   const location = useLocation();
   const navigate = useNavigate();
 
   const handleLogout = async () => {
     await logout();
     navigate("/login", { replace: true });
+  };
+
+  const handleBellClick = () => {
+    // Mark current notices seen first so the dot clears immediately, then open
+    // the notices view.
+    markAllSeen();
+    navigate("/notices");
   };
 
   return (
@@ -32,10 +46,19 @@ export function Topbar({ onOpenMenu }: TopbarProps) {
       </button>
       <h2 className="text-[15px] font-semibold text-ink truncate">{pageTitle(location.pathname)}</h2>
       <div className="ml-auto flex items-center gap-3">
-        <button className="relative grid h-9 w-9 place-items-center rounded-xl text-slate-muted hover:text-indigo hover:bg-indigo/10 transition-colors" aria-label="Notifications">
+        <button
+          onClick={handleBellClick}
+          className="relative grid h-9 w-9 place-items-center rounded-xl text-slate-muted hover:text-indigo hover:bg-indigo/10 transition-colors"
+          aria-label={hasUnseen ? "View notices — new" : "View notices"}
+          title="Notices"
+        >
           <Bell size={20} />
-          <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-rose ring-2 ring-white" />
-          <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-rose animate-pulseRing" />
+          {hasUnseen && (
+            <>
+              <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-rose ring-2 ring-white" />
+              <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-rose animate-pulseRing" />
+            </>
+          )}
         </button>
         <div className="flex items-center gap-2.5 pl-1">
           <div className="h-9 w-9 rounded-full grid place-items-center text-xs font-bold text-white bg-gradient-to-br from-indigo to-violet ring-2 ring-white shadow-glow">

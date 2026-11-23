@@ -47,7 +47,7 @@ export function Sidebar({ role, open, onClose }: SidebarProps) {
                 <NavLink
                   key={item.to}
                   to={item.to}
-                  end={item.to === "/admin" || item.to === "/teacher" || item.to === "/student"}
+                  end={item.to === "/admin" || item.to === "/teacher" || item.to === "/student" || item.to === "/attendance"}
                   onClick={onClose}
                   className={({ isActive }) =>
                     cn(

@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, Users, GraduationCap, CalendarCheck, FileText, ClipboardList,
-  Wallet, CalendarDays, BookOpen, Megaphone, BarChart3,
+  Wallet, CalendarDays, BookOpen, BarChart3,
 } from "lucide-react";
 import type { Role } from "@/lib/constants";
 
@@ -27,7 +27,8 @@ export const NAV: NavItem[] = [
   { to: "/materials", label: "Materials", icon: BookOpen, roles: ["admin", "teacher", "student"], group: "Academics" },
   { to: "/fees", label: "Fees", icon: Wallet, roles: ["admin"], group: "Finance" },
   { to: "/student/fees", label: "My Fees", icon: Wallet, roles: ["student"], group: "Finance" },
-  { to: "/notices", label: "Notices", icon: Megaphone, roles: ["admin", "teacher", "student"], group: "Communication" },
+  // Notices is intentionally absent from the sidebar — it is reachable only
+  // via the bell icon in the Topbar, which doubles as the unseen-notice badge.
   { to: "/reports", label: "Reports", icon: BarChart3, roles: ["admin", "teacher"], group: "Communication" },
 ];
 
