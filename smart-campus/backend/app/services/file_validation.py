@@ -87,25 +87,31 @@ def validate_size(size_bytes: int, max_mb: int | None = None) -> None:
 def _verify_pdf(data: bytes) -> None:
     """Reject anything that is not a parseable PDF.
 
-    The ``%PDF-`` header is checked first (cheap), then the bytes are handed to
-    ``pypdf`` in strict mode — a real parse that rejects truncated xref tables,
-    broken streams and missing EOF markers. A document with zero pages is also
-    rejected (a header-only file would otherwise pass).
+    The ``%PDF-`` header is checked first (cheap). Per the PDF specification the
+    header may appear anywhere within the first 1024 bytes — real-world PDFs
+    from scanners, email systems and some editors carry a few leading bytes
+    before ``%PDF-``, so a strict ``startswith`` check would wrongly reject
+    them. The bytes are then handed to ``pypdf`` in *lenient* (non-strict) mode:
+    a real parse that still rejects non-PDFs, truncated files and broken
+    streams, while accepting valid documents that strict mode would flag
+    (leading bytes, linearized docs, xref/object streams, minor quirks). A
+    document with zero pages is also rejected (a header-only file would
+    otherwise pass).
     """
-    if len(data) < 8 or not data.startswith(b"%PDF-"):
+    if len(data) < 8 or b"%PDF-" not in data[:1024]:
         raise FileValidationError("File does not have a valid PDF header.")
     try:
         from pypdf import PdfReader
     except ImportError as exc:  # pragma: no cover - environment guard
         raise FileValidationError("PDF validation is unavailable on this server.") from exc
     try:
-        reader = PdfReader(io.BytesIO(data), strict=True)
+        reader = PdfReader(io.BytesIO(data), strict=False)
         if len(reader.pages) == 0:
             raise FileValidationError("PDF contains no pages.")
     except FileValidationError:
         raise
     except Exception as exc:
-        # Any parse failure (PdfReadError, KeyError on xref, truncation, …)
+        # Any parse failure (PdfReadError, PdfStreamError on truncation, …)
         # means the file is not a valid PDF — reject it.
         raise FileValidationError("File is not a valid or parseable PDF.") from exc
 

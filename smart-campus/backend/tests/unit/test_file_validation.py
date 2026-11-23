@@ -78,6 +78,19 @@ def test_validate_content_pdf_ok():
     assert validate_content(_pdf_bytes(), "pdf") == "application/pdf"
 
 
+def test_validate_content_pdf_with_leading_bytes_ok():
+    """Real-world PDFs (scanners, email wrappers, editors) often carry a few
+    leading bytes before %PDF-. The spec allows the header within the first
+    1024 bytes, so these are valid PDFs and must be accepted."""
+    assert validate_content(b"LEADING-GARBAGE!!!" + _pdf_bytes(), "pdf") == "application/pdf"
+
+
+def test_validate_content_pdf_with_trailing_bytes_ok():
+    """Trailing bytes after %%EOF (signatures, appended metadata) are tolerated
+    by the spec and by pypdf in lenient mode."""
+    assert validate_content(_pdf_bytes() + b"\x00" * 256, "pdf") == "application/pdf"
+
+
 @pytest.mark.parametrize("ext,fmt", [("png", "PNG"), ("jpg", "JPEG"), ("jpeg", "JPEG"), ("webp", "WEBP")])
 def test_validate_content_image_ok(ext, fmt):
     assert validate_content(_image_bytes(fmt), ext) == EXTENSION_MIME[ext]

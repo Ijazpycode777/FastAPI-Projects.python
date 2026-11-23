@@ -100,6 +100,16 @@ async def test_valid_pdf_upload(admin_client, academic_setup):
     assert body["file_size"] > 0
 
 
+async def test_pdf_with_leading_bytes_upload_accepted(admin_client, academic_setup):
+    """Regression: real-world PDFs (scanned / emailed / editor-saved) often
+    carry a few leading bytes before %PDF-. The server must accept these as
+    valid PDFs, not reject them with 'File does not have a valid PDF header'."""
+    data = b"LEADING-GARBAGE!!!" + _pdf_bytes()
+    resp = await _upload(admin_client, academic_setup, "scan.pdf", data, "application/pdf")
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["content_type"] == "application/pdf"
+
+
 @pytest.mark.parametrize("ext,fmt,mime", [
     ("png", "PNG", "image/png"),
     ("jpg", "JPEG", "image/jpeg"),
