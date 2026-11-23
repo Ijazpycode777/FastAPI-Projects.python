@@ -172,6 +172,7 @@ async def academic_setup(admin_client, seed_departments):
         "class_id": cls.json()["id"],
         "section_id": sec.json()["id"],
         "subject_id": subj.json()["id"],
+        "subject_name": "Computer Science",
         "department_id": dept_id,
         # Free-text placement names (match what was created above so the
         # student create endpoint's find-or-create resolves to the same rows).

@@ -12,10 +12,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.exceptions import ForbiddenError, NotFoundError, ValidationError
+from app.models.academic import ClassLevel
 from app.models.materials import StudyMaterial
 from app.models.people import Student
 from app.repositories.audit import record_audit
-from app.services.academic_service import teacher_authorized_for
+from app.services.academic_service import resolve_or_create_subject, teacher_assigned_to_class
 from app.services.file_validation import FileValidationError, validate_upload
 from app.services.storage import get_storage, make_storage_key
 
@@ -65,16 +66,24 @@ async def _read_bounded(file: UploadFile, max_bytes: int) -> tuple[str, int]:
 
 async def upload(
     db: AsyncSession, actor, *, title: str, description: str | None,
-    subject_id: str, class_id: str, section_id: str | None, file: UploadFile,
+    subject: str, class_id: str, section_id: str | None, file: UploadFile,
 ) -> StudyMaterial:
+    # Resolve the class → program so the typed subject name can be matched
+    # (or created) within the right program. A missing class is a 404, not a
+    # 500 from a later FK violation on the material row.
+    class_level = await db.get(ClassLevel, class_id)
+    if class_level is None:
+        raise NotFoundError("Selected class does not exist.")
+    program_id = str(class_level.program_id)
+
     # Authorize BEFORE reading any bytes so a forbidden request never pays the
-    # cost of (or stores) the upload.
+    # cost of (or stores) the upload. The subject is now a free-text label, so
+    # the check is class-level: a teacher may upload for any class they are
+    # assigned to (any subject/section), not only a specific subject assignment.
     if actor.role == "teacher":
-        auth = await teacher_authorized_for(
-            db, str(actor.teacher_profile.id), subject_id, class_id, section_id,
-        )
-        if not auth:
-            raise ForbiddenError("You can only upload materials for subjects/classes assigned to you.")
+        teacher_id = str(actor.teacher_profile.id)
+        if not await teacher_assigned_to_class(db, teacher_id, class_id):
+            raise ForbiddenError("You can only upload materials for classes assigned to you.")
 
     max_bytes = settings.max_upload_mb * 1024 * 1024
     tmp_path: str | None = None
@@ -90,15 +99,21 @@ async def upload(
             data = fh.read()
         ext, mime = validate_upload(file.filename or "upload", data)
 
-        # 3. Persist the validated bytes to storage.
+        # 3. Resolve the typed subject name to a Subject row (creating it if it
+        #    is new to this program) AFTER content validation, so a rejected
+        #    upload never leaves an orphan subject. The flush shares this
+        #    transaction and rolls back with it on any later failure.
+        subject_obj = await resolve_or_create_subject(db, program_id, subject)
+
+        # 4. Persist the validated bytes to storage.
         storage = get_storage()
         storage_key = make_storage_key(file.filename or f"upload.{ext}")
         storage.save(storage_key, io.BytesIO(data), mime)
 
-        # 4. Only after the file is safely stored do we create the DB record.
+        # 5. Only after the file is safely stored do we create the DB record.
         material = StudyMaterial(
             title=title, description=description,
-            subject_id=subject_id, class_id=class_id, section_id=section_id,
+            subject_id=str(subject_obj.id), class_id=class_id, section_id=section_id,
             uploaded_by=actor.id, storage_backend=settings_storage_backend(),
             storage_key=storage_key, file_name=file.filename or f"upload.{ext}",
             file_size=size, content_type=mime, is_active=True,
@@ -166,11 +181,13 @@ async def download(db: AsyncSession, user, material_id: str) -> tuple[StudyMater
         if material.section_id and str(material.section_id) != str(student.current_section_id):
             raise ForbiddenError("You are not authorized to download this material.")
     elif user.role == "teacher":
-        auth = await teacher_authorized_for(
-            db, str(user.teacher_profile.id), str(material.subject_id),
-            str(material.class_id), str(material.section_id) if material.section_id else None,
-        )
-        if not auth:
+        # Class-level authz (consistent with upload): a teacher assigned to the
+        # class may download its materials, and the uploader always may. This
+        # matters now that the subject is a free-text label that may not appear
+        # in the teacher's own assignment list.
+        teacher_id = str(user.teacher_profile.id)
+        owns = str(getattr(material, "uploaded_by", "")) == str(user.id)
+        if not (owns or await teacher_assigned_to_class(db, teacher_id, str(material.class_id))):
             raise ForbiddenError("You are not authorized to download this material.")
     storage = get_storage()
     return material, storage.open(material.storage_key)

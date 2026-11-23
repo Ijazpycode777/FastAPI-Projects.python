@@ -76,9 +76,9 @@ def _pdf_of_exact_size(target: int) -> bytes:
 
 # ---------- upload helper ----------
 
-async def _upload(client, setup, filename, data, content_type="application/octet-stream", title="Material"):
+async def _upload(client, setup, filename, data, content_type="application/octet-stream", title="Material", subject=None):
     return await client.post("/api/v1/materials", data={
-        "title": title, "subject_id": setup["subject_id"], "class_id": setup["class_id"],
+        "title": title, "subject": subject or setup["subject_name"], "class_id": setup["class_id"],
         "section_id": setup["section_id"],
     }, files={"file": (filename, data, content_type)})
 
@@ -108,6 +108,38 @@ async def test_pdf_with_leading_bytes_upload_accepted(admin_client, academic_set
     resp = await _upload(admin_client, academic_setup, "scan.pdf", data, "application/pdf")
     assert resp.status_code == 200, resp.text
     assert resp.json()["content_type"] == "application/pdf"
+
+
+async def test_manual_subject_creates_new_subject(admin_client, academic_setup):
+    """A typed subject name not already in the program is created on the fly, so
+    the manual field is not limited to the predefined options."""
+    name = "Linear Algebra"
+    resp = await _upload(admin_client, academic_setup, "la.pdf", _pdf_bytes(),
+                         "application/pdf", title="LA notes", subject=name)
+    assert resp.status_code == 200, resp.text
+    subs = (await admin_client.get("/api/v1/subjects",
+                                   params={"program_id": academic_setup["program_id"]})).json()
+    new_sub = next((s for s in subs if s["name"] == name), None)
+    assert new_sub is not None, "new subject was not auto-created"
+    assert resp.json()["subject_id"] == new_sub["id"]
+
+
+async def test_manual_subject_case_insensitive_reuse(admin_client, academic_setup):
+    """Typing the same subject with different casing/whitespace resolves to the
+    existing row — no duplicate subjects are created."""
+    subs_before = (await admin_client.get("/api/v1/subjects",
+                                          params={"program_id": academic_setup["program_id"]})).json()
+    cs_before = sum(1 for s in subs_before if s["name"].lower() == "computer science")
+
+    resp = await _upload(admin_client, academic_setup, "cs2.pdf", _pdf_bytes(),
+                         "application/pdf", subject="  COMPUTER SCIENCE  ")
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["subject_id"] == academic_setup["subject_id"]
+
+    subs_after = (await admin_client.get("/api/v1/subjects",
+                                         params={"program_id": academic_setup["program_id"]})).json()
+    cs_after = sum(1 for s in subs_after if s["name"].lower() == "computer science")
+    assert cs_after == cs_before, "case-insensitive reuse created a duplicate subject"
 
 
 @pytest.mark.parametrize("ext,fmt,mime", [

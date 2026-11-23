@@ -13,7 +13,7 @@ from app.models.user import User
 from app.schemas.materials import StudyMaterialOut
 from app.security.dependencies import get_current_user, require_staff, require_student
 from app.services import material_service
-from app.services.academic_service import teacher_authorized_for
+from app.services.academic_service import teacher_assigned_to_class
 
 router = APIRouter(prefix="/materials", tags=["materials"])
 
@@ -22,7 +22,7 @@ router = APIRouter(prefix="/materials", tags=["materials"])
 async def upload(
     title: str = Form(...),
     description: str | None = Form(None),
-    subject_id: str = Form(...),
+    subject: str = Form(..., min_length=1, max_length=120),
     class_id: str = Form(...),
     section_id: str | None = Form(None),
     file: UploadFile = File(...),
@@ -31,7 +31,7 @@ async def upload(
 ):
     material = await material_service.upload(
         db, user, title=title, description=description,
-        subject_id=subject_id, class_id=class_id, section_id=section_id, file=file,
+        subject=subject, class_id=class_id, section_id=section_id, file=file,
     )
     return StudyMaterialOut.model_validate(material)
 
@@ -74,9 +74,8 @@ async def delete(material_id: str, user: User = Depends(require_staff()), db: As
     if user.role == "teacher":
         teacher_id = str(user.teacher_profile.id) if getattr(user, "teacher_profile", None) else None
         owns = str(getattr(material, "uploaded_by", "")) == str(user.id)
-        authz = bool(teacher_id) and await teacher_authorized_for(
-            db, teacher_id, str(material.subject_id), str(material.class_id),
-            str(material.section_id) if material.section_id else None,
+        authz = bool(teacher_id) and await teacher_assigned_to_class(
+            db, teacher_id, str(material.class_id),
         )
         if not (owns or authz):
             raise ForbiddenError("You can only delete materials you uploaded or that target your assigned classes.")

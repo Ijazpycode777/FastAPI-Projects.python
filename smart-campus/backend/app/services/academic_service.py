@@ -5,12 +5,13 @@ authoritative source for teacher-side authorization.
 """
 from __future__ import annotations
 
+import re
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import ConflictError, NotFoundError
+from app.core.exceptions import ConflictError, NotFoundError, ValidationError
 from app.models.academic import (
     AcademicSession,
     ClassLevel,
@@ -41,6 +42,51 @@ async def create_program(db, actor, **kw): return await _create(db, actor, Progr
 async def create_class(db, actor, **kw): return await _create(db, actor, ClassLevel, "class.create", **kw)
 async def create_section(db, actor, **kw): return await _create(db, actor, Section, "section.create", **kw)
 async def create_subject(db, actor, **kw): return await _create(db, actor, Subject, "subject.create", **kw)
+
+
+async def resolve_or_create_subject(
+    db: AsyncSession, program_id: str, name: str,
+) -> Subject:
+    """Resolve a free-text subject name to a Subject row, creating one if it
+    does not yet exist in the program.
+
+    Material upload lets staff *type* the subject instead of picking from a
+    fixed list. Matching is case-insensitive on the trimmed name, so "Physics",
+    "physics" and "  Physics  " all resolve to the same row (no duplicates). A
+    genuinely new name creates a Subject with an auto-generated code unique
+    within the program; the creation is flushed (not committed) so it shares the
+    caller's transaction and rolls back if the surrounding operation fails.
+    """
+    cleaned = (name or "").strip()
+    if not cleaned:
+        raise ValidationError("Subject name is required.")
+    existing = (
+        await db.execute(
+            select(Subject).where(
+                Subject.program_id == program_id,
+                func.lower(Subject.name) == cleaned.lower(),
+            ).limit(1)
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        return existing
+    base = re.sub(r"[^A-Za-z0-9]+", "", cleaned).upper()[:24] or "SUBJECT"
+    code = base
+    suffix = 1
+    while (
+        await db.execute(
+            select(Subject.id).where(
+                Subject.program_id == program_id, Subject.code == code,
+            ).limit(1)
+        )
+    ).scalar_one_or_none() is not None:
+        tail = str(suffix)
+        code = base[: 24 - len(tail)] + tail
+        suffix += 1
+    subject = Subject(program_id=program_id, code=code, name=cleaned)
+    db.add(subject)
+    await db.flush()
+    return subject
 
 
 async def assign_teacher(
