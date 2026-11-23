@@ -1,4 +1,12 @@
-"""Study materials. File bytes live in object/local storage; only metadata is persisted."""
+"""Study materials. File bytes live in object/local storage; only metadata is persisted.
+
+A material is scoped to a single class — a ClassLevel row already encodes the
+(program, part) pair (e.g. "ICS Part 1" is a distinct row from "Medical Part
+1"). Student visibility filters by ``class_id``, so a PDF uploaded for ICS
+Part 1 is never shown to Medical students or to "Part 1" of any other program.
+Subject and section were removed: the upload collects only title, description,
+program (used to filter the class list), class and the file.
+"""
 from __future__ import annotations
 
 from sqlalchemy import ForeignKey, Index, Integer, String
@@ -10,19 +18,13 @@ from app.database.base import Base, TimestampMixin, UUIDPK
 class StudyMaterial(UUIDPK, TimestampMixin, Base):
     __tablename__ = "study_materials"
     __table_args__ = (
-        Index("ix_material_subject_class", "subject_id", "class_id", "section_id"),
+        Index("ix_material_class", "class_id"),
     )
 
     title: Mapped[str] = mapped_column(String(160), nullable=False)
     description: Mapped[str | None] = mapped_column(String(1000), nullable=True)
-    subject_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("subjects.id", ondelete="RESTRICT"), nullable=False
-    )
     class_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("class_levels.id", ondelete="RESTRICT"), nullable=False
-    )
-    section_id: Mapped[str | None] = mapped_column(
-        String(36), ForeignKey("sections.id", ondelete="SET NULL"), nullable=True
     )
     uploaded_by: Mapped[str] = mapped_column(
         String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
@@ -34,5 +36,4 @@ class StudyMaterial(UUIDPK, TimestampMixin, Base):
     content_type: Mapped[str] = mapped_column(String(120), nullable=False)
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
 
-    subject = relationship("Subject")
     class_level = relationship("ClassLevel")

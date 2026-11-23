@@ -16,7 +16,7 @@ from app.models.academic import ClassLevel
 from app.models.materials import StudyMaterial
 from app.models.people import Student
 from app.repositories.audit import record_audit
-from app.services.academic_service import resolve_or_create_subject, teacher_assigned_to_class
+from app.services.academic_service import teacher_assigned_to_class
 from app.services.file_validation import FileValidationError, validate_upload
 from app.services.storage import get_storage, make_storage_key
 
@@ -66,20 +66,18 @@ async def _read_bounded(file: UploadFile, max_bytes: int) -> tuple[str, int]:
 
 async def upload(
     db: AsyncSession, actor, *, title: str, description: str | None,
-    subject: str, class_id: str, section_id: str | None, file: UploadFile,
+    class_id: str, file: UploadFile,
 ) -> StudyMaterial:
-    # Resolve the class → program so the typed subject name can be matched
-    # (or created) within the right program. A missing class is a 404, not a
-    # 500 from a later FK violation on the material row.
+    # Validate the class up front so a bad class_id is a 404, not a 500 from a
+    # later FK violation on the material row.
     class_level = await db.get(ClassLevel, class_id)
     if class_level is None:
         raise NotFoundError("Selected class does not exist.")
-    program_id = str(class_level.program_id)
 
     # Authorize BEFORE reading any bytes so a forbidden request never pays the
-    # cost of (or stores) the upload. The subject is now a free-text label, so
+    # cost of (or stores) the upload. A material is scoped to a single class, so
     # the check is class-level: a teacher may upload for any class they are
-    # assigned to (any subject/section), not only a specific subject assignment.
+    # assigned to (any subject/section).
     if actor.role == "teacher":
         teacher_id = str(actor.teacher_profile.id)
         if not await teacher_assigned_to_class(db, teacher_id, class_id):
@@ -99,21 +97,17 @@ async def upload(
             data = fh.read()
         ext, mime = validate_upload(file.filename or "upload", data)
 
-        # 3. Resolve the typed subject name to a Subject row (creating it if it
-        #    is new to this program) AFTER content validation, so a rejected
-        #    upload never leaves an orphan subject. The flush shares this
-        #    transaction and rolls back with it on any later failure.
-        subject_obj = await resolve_or_create_subject(db, program_id, subject)
-
-        # 4. Persist the validated bytes to storage.
+        # 3. Persist the validated bytes to storage.
         storage = get_storage()
         storage_key = make_storage_key(file.filename or f"upload.{ext}")
         storage.save(storage_key, io.BytesIO(data), mime)
 
-        # 5. Only after the file is safely stored do we create the DB record.
+        # 4. Only after the file is safely stored do we create the DB record.
+        #    The material is scoped to the selected class only (no subject or
+        #    section) — student visibility is filtered by class_id.
         material = StudyMaterial(
             title=title, description=description,
-            subject_id=str(subject_obj.id), class_id=class_id, section_id=section_id,
+            class_id=class_id,
             uploaded_by=actor.id, storage_backend=settings_storage_backend(),
             storage_key=storage_key, file_name=file.filename or f"upload.{ext}",
             file_size=size, content_type=mime, is_active=True,
@@ -156,17 +150,20 @@ def settings_storage_backend() -> str:
 
 
 async def list_for_student(db: AsyncSession, student: Student) -> list[StudyMaterial]:
-    """Materials the student is authorized to see: their class (+ section if set)."""
+    """Materials the student is authorized to see: their exact class only.
+
+    ``current_class_id`` points at a specific ClassLevel row, which already
+    encodes (program, part) — e.g. "ICS Part 1" is a different row from
+    "Medical Part 1". Filtering by ``class_id`` therefore guarantees that a PDF
+    uploaded for ICS Part 1 never surfaces for Medical students or for "Part 1"
+    of any other program.
+    """
     if student.current_class_id is None:
         return []
     stmt = select(StudyMaterial).where(
         StudyMaterial.class_id == student.current_class_id,
         StudyMaterial.is_active.is_(True),
     )
-    if student.current_section_id:
-        stmt = stmt.where(
-            (StudyMaterial.section_id == student.current_section_id) | (StudyMaterial.section_id.is_(None))
-        )
     return list((await db.execute(stmt.order_by(StudyMaterial.created_at.desc()))).scalars().all())
 
 
@@ -178,13 +175,9 @@ async def download(db: AsyncSession, user, material_id: str) -> tuple[StudyMater
         student = user.student_profile
         if str(material.class_id) != str(student.current_class_id):
             raise ForbiddenError("You are not authorized to download this material.")
-        if material.section_id and str(material.section_id) != str(student.current_section_id):
-            raise ForbiddenError("You are not authorized to download this material.")
     elif user.role == "teacher":
         # Class-level authz (consistent with upload): a teacher assigned to the
-        # class may download its materials, and the uploader always may. This
-        # matters now that the subject is a free-text label that may not appear
-        # in the teacher's own assignment list.
+        # class may download its materials, and the uploader always may.
         teacher_id = str(user.teacher_profile.id)
         owns = str(getattr(material, "uploaded_by", "")) == str(user.id)
         if not (owns or await teacher_assigned_to_class(db, teacher_id, str(material.class_id))):

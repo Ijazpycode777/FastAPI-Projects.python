@@ -6,7 +6,7 @@ import { Field, TextInput, Textarea, Select } from "@/components/forms";
 import { http, API_BASE } from "@/lib/api";
 import { useToast } from "@/hooks/useToast";
 import { useAuth } from "@/hooks/useAuth";
-import { usePrograms, useClasses, useSections } from "@/features/academicQueries";
+import { usePrograms, useClasses } from "@/features/academicQueries";
 import type { StudyMaterial } from "@/types";
 import { formatDateTime, humanSize } from "@/lib/utils";
 
@@ -18,12 +18,11 @@ export function MaterialsPage() {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
-  const [form, setForm] = useState({ title: "", description: "", program_id: "", class_id: "", section_id: "", subject: "" });
+  const [form, setForm] = useState({ title: "", description: "", program_id: "", class_id: "" });
 
   const { data, isLoading, isError, refetch } = useQuery({ queryKey: ["materials"], queryFn: () => http.get<StudyMaterial[]>("/materials") });
   const programs = usePrograms();
   const classes = useClasses(form.program_id);
-  const sections = useSections(form.class_id);
 
   const uploadMutation = useMutation({
     mutationFn: () => {
@@ -31,12 +30,11 @@ export function MaterialsPage() {
       if (!file) throw new Error("Choose a file");
       const fd = new FormData();
       fd.append("title", form.title); fd.append("description", form.description);
-      fd.append("subject", form.subject); fd.append("class_id", form.class_id);
-      if (form.section_id) fd.append("section_id", form.section_id);
+      fd.append("class_id", form.class_id);
       fd.append("file", file);
       return http.post<StudyMaterial>("/materials", fd);
     },
-    onSuccess: () => { toast.success("Material uploaded"); setOpen(false); setForm({ title: "", description: "", program_id: "", class_id: "", section_id: "", subject: "" }); qc.invalidateQueries({ queryKey: ["materials"] }); },
+    onSuccess: () => { toast.success("Material uploaded"); setOpen(false); setForm({ title: "", description: "", program_id: "", class_id: "" }); qc.invalidateQueries({ queryKey: ["materials"] }); },
     onError: (e: unknown) => toast.error("Upload failed", (e as Error).message),
   });
 
@@ -73,11 +71,7 @@ export function MaterialsPage() {
           <Field label="Title" required><TextInput value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></Field>
           <Field label="Description"><Textarea rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></Field>
           <Field label="Program" required><Select value={form.program_id} onChange={(e) => setForm({ ...form, program_id: e.target.value, class_id: "" })}><option value="">Select…</option>{programs.data?.map((p) => <option key={p.id} value={p.id}>{p.code}</option>)}</Select></Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Class" required><Select value={form.class_id} onChange={(e) => setForm({ ...form, class_id: e.target.value })} disabled={!form.program_id}><option value="">Select…</option>{classes.data?.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</Select></Field>
-            <Field label="Section"><Select value={form.section_id} onChange={(e) => setForm({ ...form, section_id: e.target.value })} disabled={!form.class_id}><option value="">All</option>{sections.data?.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</Select></Field>
-          </div>
-          <Field label="Subject" required hint="Type the subject name"><TextInput value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} placeholder="e.g. Computer Science" /></Field>
+          <Field label="Class" required hint="e.g. Part 1 or Part 2"><Select value={form.class_id} onChange={(e) => setForm({ ...form, class_id: e.target.value })} disabled={!form.program_id}><option value="">Select…</option>{classes.data?.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</Select></Field>
           <Field label="File" required hint="PDF, DOCX, PPTX or images up to 25 MB"><input ref={fileRef} type="file" className="input" /></Field>
         </div>
       </Modal>

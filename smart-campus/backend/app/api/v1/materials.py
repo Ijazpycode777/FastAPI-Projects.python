@@ -22,23 +22,20 @@ router = APIRouter(prefix="/materials", tags=["materials"])
 async def upload(
     title: str = Form(...),
     description: str | None = Form(None),
-    subject: str = Form(..., min_length=1, max_length=120),
     class_id: str = Form(...),
-    section_id: str | None = Form(None),
     file: UploadFile = File(...),
     user: User = Depends(require_staff()),
     db: AsyncSession = Depends(get_db),
 ):
     material = await material_service.upload(
         db, user, title=title, description=description,
-        subject=subject, class_id=class_id, section_id=section_id, file=file,
+        class_id=class_id, file=file,
     )
     return StudyMaterialOut.model_validate(material)
 
 
 @router.get("", response_model=list[StudyMaterialOut])
 async def list_materials(
-    subject_id: str | None = Query(None),
     class_id: str | None = Query(None),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -47,8 +44,6 @@ async def list_materials(
         rows = await material_service.list_for_student(db, user.student_profile)
     else:
         stmt = select(StudyMaterial).where(StudyMaterial.is_active.is_(True)).order_by(StudyMaterial.created_at.desc())
-        if subject_id:
-            stmt = stmt.where(StudyMaterial.subject_id == subject_id)
         if class_id:
             stmt = stmt.where(StudyMaterial.class_id == class_id)
         rows = (await db.execute(stmt.limit(100))).scalars().all()

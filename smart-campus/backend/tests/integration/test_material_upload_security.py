@@ -76,10 +76,9 @@ def _pdf_of_exact_size(target: int) -> bytes:
 
 # ---------- upload helper ----------
 
-async def _upload(client, setup, filename, data, content_type="application/octet-stream", title="Material", subject=None):
+async def _upload(client, setup, filename, data, content_type="application/octet-stream", title="Material"):
     return await client.post("/api/v1/materials", data={
-        "title": title, "subject": subject or setup["subject_name"], "class_id": setup["class_id"],
-        "section_id": setup["section_id"],
+        "title": title, "class_id": setup["class_id"],
     }, files={"file": (filename, data, content_type)})
 
 
@@ -110,36 +109,40 @@ async def test_pdf_with_leading_bytes_upload_accepted(admin_client, academic_set
     assert resp.json()["content_type"] == "application/pdf"
 
 
-async def test_manual_subject_creates_new_subject(admin_client, academic_setup):
-    """A typed subject name not already in the program is created on the fly, so
-    the manual field is not limited to the predefined options."""
-    name = "Linear Algebra"
-    resp = await _upload(admin_client, academic_setup, "la.pdf", _pdf_bytes(),
-                         "application/pdf", title="LA notes", subject=name)
+async def test_material_visible_only_to_exact_class(admin_client, academic_setup, db):
+    """A material uploaded for ICS Part 1 is visible to ICS Part 1 students but
+    NOT to Medical students, and NOT to students in 'Part 1' of another program.
+
+    ``class_id`` points at a specific ClassLevel row, which already encodes
+    (program, part) — 'ICS Part 1' and 'Medical Part 1' are different rows even
+    though both are named 'Part 1'. Filtering by ``class_id`` therefore gives
+    exact scoping: no cross-program / cross-class leakage.
+    """
+    from types import SimpleNamespace
+    from app.services import material_service
+
+    resp = await _upload(admin_client, academic_setup, "ics.pdf", _pdf_bytes(),
+                         "application/pdf", title="ICS Part 1 notes")
     assert resp.status_code == 200, resp.text
-    subs = (await admin_client.get("/api/v1/subjects",
-                                   params={"program_id": academic_setup["program_id"]})).json()
-    new_sub = next((s for s in subs if s["name"] == name), None)
-    assert new_sub is not None, "new subject was not auto-created"
-    assert resp.json()["subject_id"] == new_sub["id"]
+    ics_p1_class = academic_setup["class_id"]
 
+    # A second program with its own 'Part 1' class — same name, different row.
+    med = await admin_client.post("/api/v1/programs", json={"code": "MBBS", "name": "Medical"})
+    assert med.status_code == 200, med.text
+    med_p1 = await admin_client.post("/api/v1/classes", json={
+        "program_id": med.json()["id"], "name": "Part 1", "year": 1,
+    })
+    assert med_p1.status_code == 200, med_p1.text
+    med_p1_class = med_p1.json()["id"]
+    assert med_p1_class != ics_p1_class
 
-async def test_manual_subject_case_insensitive_reuse(admin_client, academic_setup):
-    """Typing the same subject with different casing/whitespace resolves to the
-    existing row — no duplicate subjects are created."""
-    subs_before = (await admin_client.get("/api/v1/subjects",
-                                          params={"program_id": academic_setup["program_id"]})).json()
-    cs_before = sum(1 for s in subs_before if s["name"].lower() == "computer science")
+    # An ICS Part 1 student sees the material.
+    seen = await material_service.list_for_student(db, SimpleNamespace(current_class_id=ics_p1_class))
+    assert any(m.title == "ICS Part 1 notes" for m in seen)
 
-    resp = await _upload(admin_client, academic_setup, "cs2.pdf", _pdf_bytes(),
-                         "application/pdf", subject="  COMPUTER SCIENCE  ")
-    assert resp.status_code == 200, resp.text
-    assert resp.json()["subject_id"] == academic_setup["subject_id"]
-
-    subs_after = (await admin_client.get("/api/v1/subjects",
-                                         params={"program_id": academic_setup["program_id"]})).json()
-    cs_after = sum(1 for s in subs_after if s["name"].lower() == "computer science")
-    assert cs_after == cs_before, "case-insensitive reuse created a duplicate subject"
+    # A Medical Part 1 student does NOT — even though their class is also 'Part 1'.
+    unseen = await material_service.list_for_student(db, SimpleNamespace(current_class_id=med_p1_class))
+    assert not any(m.title == "ICS Part 1 notes" for m in unseen)
 
 
 @pytest.mark.parametrize("ext,fmt,mime", [

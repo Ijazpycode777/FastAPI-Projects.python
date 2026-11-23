@@ -12,9 +12,7 @@ class StudyMaterialOut(ORMBase):
     id: str
     title: str
     description: str | None = None
-    subject_id: str
     class_id: str
-    section_id: str | None = None
     uploaded_by: str | None = None
     created_at: datetime
     file_name: str
@@ -26,9 +24,7 @@ class StudyMaterialOut(ORMBase):
 class StudyMaterialCreate(BaseModel):
     title: str = Field(min_length=1, max_length=160)
     description: str | None = None
-    subject_id: str
     class_id: str
-    section_id: str | None = None
 
 
 # ---------------- Notices ----------------

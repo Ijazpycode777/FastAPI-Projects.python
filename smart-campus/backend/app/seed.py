@@ -531,7 +531,7 @@ async def seed_demo_data() -> None:
             await _get_or_create(
                 db, StudyMaterial, [StudyMaterial.title == "Intro to Algorithms — Lecture Notes"],
                 title="Intro to Algorithms — Lecture Notes", description="Week 1-4 notes",
-                subject_id=prog_cs.id, class_id=ics_p1.id, section_id=ics_p1_a.id,
+                class_id=ics_p1.id,
                 uploaded_by=teacher_user.id, storage_backend="local",
                 storage_key=material_key, file_name="algorithms.pdf",
                 file_size=len(pdf_bytes), content_type="application/pdf", is_active=True,
