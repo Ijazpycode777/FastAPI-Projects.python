@@ -65,7 +65,9 @@ erDiagram
 ### Key integrity rules enforced
 
 - `students.admission_number` — unique.
-- `student_enrolments(session, section, roll_number)` — unique, so roll numbers never collide.
+- `student_enrolments(academic_session_id, roll_number)` — unique: roll numbers are unique across the entire academic session (not per section), so two students in different sections/classes/programs of one session can never share a roll; the same roll may be reused in a different session.
+- `student_enrolments(student_id, academic_session_id)` — unique: a student has at most one enrolment per academic session (same-session changes update the row in place; promotions to a new session deactivate the old row).
+- `student_academic_history(enrolment_id)` — unique (one-to-one with `student_enrolments`).
 - `attendance_records(student, timetable_entry, date)` — unique, preventing duplicate attendance.
 - `student_marks(exam, student)` — unique (indexed), preventing duplicate marks.
 - `timetable_entries` — `end_time > start_time` check; teacher/classroom/class/section overlaps are rejected transactionally in the service layer.

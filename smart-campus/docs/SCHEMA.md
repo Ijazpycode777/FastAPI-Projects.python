@@ -59,10 +59,10 @@ Server-side session rows. The cookie token is opaque; the row is the truth.
 `user_id` FK (cascade, unique), `admission_number` (unique), `full_name`, `email`, `phone`, `date_of_birth`, `gender` (check), `guardian_id` FK (set null), `admission_date`, `account_status` (check), plus current placement pointers: `current_program_id`, `current_class_id`, `current_section_id`, `current_session_id`, `current_roll_number`. These mutate on promotion; history is preserved in enrolments.
 
 ### `student_enrolments`
-One row per (student, academic session). `student_id` FK, `academic_session_id`, `program_id`, `class_id`, `section_id`, `roll_number`, `is_active`. Unique `(session, section, roll_number)`. Previous enrolments are deactivated, never deleted.
+One row per (student, academic session). `student_id` FK, `academic_session_id`, `program_id`, `class_id`, `section_id`, `roll_number`, `is_active`. Unique `(academic_session_id, roll_number)` — roll numbers are unique across the ENTIRE session (not per section), so two students in different sections, classes or programs of one session can never share a roll; the same roll may be reused in a different session. Unique `(student_id, academic_session_id)` — a student has at most one enrolment per session (same-session placement changes update the existing row in place; different-session promotions deactivate the old enrolment and create a new one). Previous enrolments are deactivated, never deleted.
 
 ### `student_academic_history`
-Snapshot of placement at promotion time: `previous_class`, `previous_section`, `previous_session`, `previous_roll_number`, `action` (promoted/repeated/section_change/left), `note`.
+Snapshot of placement at promotion time: `student_id` FK, `enrolment_id` FK (unique — one-to-one with `student_enrolments`), `previous_class`, `previous_section`, `previous_session`, `previous_roll_number`, `action` (promoted/repeated/section_change/left), `note`.
 
 ### `board_examination_records`
 External board results, separate from college exams. `student_id`, `level` (matric/inter_part1), `board`, `examination_year`, `total_marks`, `obtained_marks`, `grade`. Unique `(student, level)`.

@@ -119,12 +119,19 @@ class StudentEnrolment(UUIDPK, TimestampMixin, Base):
     """
     __tablename__ = "student_enrolments"
     __table_args__ = (
-        # Roll numbers are unique within an academic session + section.
+        # Roll numbers are unique across the ENTIRE academic session — two
+        # students in the same session can never share a roll number, even in
+        # different sections, classes or programs. The same roll may be reused
+        # in a different session.
         UniqueConstraint(
-            "academic_session_id", "section_id", "roll_number",
-            name="uq_enrolment_session_section_roll",
+            "academic_session_id", "roll_number",
+            name="uq_enrolment_session_roll",
         ),
-        Index("ix_enrolment_student_session", "student_id", "academic_session_id"),
+        # A student has at most one enrolment record per academic session.
+        UniqueConstraint(
+            "student_id", "academic_session_id",
+            name="uq_enrolment_student_session",
+        ),
         Index("ix_enrolment_section_roll", "section_id", "roll_number"),
     )
 
@@ -153,6 +160,11 @@ class StudentEnrolment(UUIDPK, TimestampMixin, Base):
 class StudentAcademicHistory(UUIDPK, TimestampMixin, Base):
     """Snapshot of placement at the moment of promotion. Preserves previous values."""
     __tablename__ = "student_academic_history"
+    __table_args__ = (
+        # One-to-one with StudentEnrolment: each enrolment has at most one
+        # history snapshot (matches the uselist=False relationship below).
+        UniqueConstraint("enrolment_id", name="uq_academic_history_enrolment"),
+    )
 
     student_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("students.id", ondelete="CASCADE"), nullable=False

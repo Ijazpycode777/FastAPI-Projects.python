@@ -6,6 +6,7 @@ from datetime import date
 from typing import Any
 
 from sqlalchemy import func, or_, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ConflictError, NotFoundError, ValidationError
@@ -161,29 +162,50 @@ async def _next_admission_number(db: AsyncSession, admitted_on: date) -> str:
     return f"{prefix}-{count + 1:05d}"
 
 
-async def _next_roll_number_for_section(
-    db: AsyncSession, session_id: str, section_id: str, *, exclude_student_id: str | None = None
+async def _next_roll_number_for_session(
+    db: AsyncSession, session_id: str, *, exclude_student_id: str | None = None
 ) -> int:
-    """Smallest positive roll number not yet used in (academic_session, section).
+    """Smallest positive roll number not yet used anywhere in the academic session.
 
-    Roll numbers are auto-assigned and unique within an academic session +
-    section. ``exclude_student_id`` keeps a student's own existing enrolments
-    out of the occupied set, so re-resolving the same placement (or repeating a
-    class) lets the student keep their current roll instead of being bumped.
+    Roll numbers are auto-assigned and unique across the ENTIRE session — not
+    per section — so two students in different sections (or classes, or
+    programs) of the same session can never share a roll number. The same roll
+    may be reused in a different session. ``exclude_student_id`` keeps a
+    student's own existing enrolments out of the occupied set, so re-resolving
+    the same placement (or repeating a class) lets the student keep their
+    current roll instead of being bumped.
     """
-    # Serialize roll-number allocation for this (session, section) so two
-    # concurrent creates/promotions in the same section cannot both pick the
-    # same roll. The transaction-level advisory lock is held until the caller's
-    # transaction commits (the enrolment row is inserted within that window).
-    await pg_advisory_xact_lock(db, stable_lock_key("roll_seq", session_id, section_id))
+    # Serialize roll-number allocation for this session so two concurrent
+    # creates/promotions in the same session cannot both pick the same roll.
+    # The transaction-level advisory lock is held until the caller's transaction
+    # commits (the enrolment row is inserted within that window). The DB unique
+    # constraint (academic_session_id, roll_number) remains the final authority.
+    await pg_advisory_xact_lock(db, stable_lock_key("roll_seq", session_id))
     stmt = select(StudentEnrolment.roll_number).where(
         StudentEnrolment.academic_session_id == session_id,
-        StudentEnrolment.section_id == section_id,
     )
     if exclude_student_id:
         stmt = stmt.where(StudentEnrolment.student_id != exclude_student_id)
     result = await db.execute(stmt)
     return next_roll_number([r for r in result.scalars().all()])
+
+
+def _enrolment_conflict(exc: IntegrityError) -> ConflictError:
+    """Map a DB uniqueness violation on student_enrolments / academic_history to
+    a user-facing conflict (HTTP 409) — never a 500.
+
+    The advisory lock prevents the common race; this is the safety net for the
+    rare bypass (a cross-session collision, or a non-Postgres backend where the
+    advisory lock is a no-op). The violation text carries the constraint/column
+    names, which we match to a specific message."""
+    text = " ".join(filter(None, [str(exc), str(getattr(exc, "orig", ""))])).lower()
+    if "roll" in text:
+        return ConflictError("Roll number already in use in this academic session.")
+    if "enrolment" in text and "history" in text:
+        return ConflictError("Enrolment already has an academic-history record.")
+    if "student" in text and "session" in text:
+        return ConflictError("Student already has an enrolment in this academic session.")
+    return ConflictError("Enrolment conflicts with an existing record.")
 
 
 async def create_student(db: AsyncSession, actor: User, data: dict[str, Any]) -> Student:
@@ -243,7 +265,7 @@ async def create_student(db: AsyncSession, actor: User, data: dict[str, Any]) ->
         db.add(guardian)
         await db.flush()
 
-    roll = await _next_roll_number_for_section(db, data["academic_session_id"], data["section_id"])
+    roll = await _next_roll_number_for_session(db, data["academic_session_id"])
     admission_no = await _next_admission_number(db, data["admission_date"])
 
     student = Student(
@@ -266,39 +288,47 @@ async def create_student(db: AsyncSession, actor: User, data: dict[str, Any]) ->
     db.add(student)
     await db.flush()
 
-    enrolment = StudentEnrolment(
-        student_id=student.id,
-        academic_session_id=data["academic_session_id"],
-        program_id=data["program_id"],
-        class_id=data["class_id"],
-        section_id=data["section_id"],
-        roll_number=roll,
-        is_active=True,
-    )
-    db.add(enrolment)
-    await db.flush()
+    try:
+        enrolment = StudentEnrolment(
+            student_id=student.id,
+            academic_session_id=data["academic_session_id"],
+            program_id=data["program_id"],
+            class_id=data["class_id"],
+            section_id=data["section_id"],
+            roll_number=roll,
+            is_active=True,
+        )
+        db.add(enrolment)
+        await db.flush()
 
-    # Board records
-    if data.get("matric_total") is not None:
-        pct = percentage_for(data["matric_obtained"], data["matric_total"])
-        db.add(BoardExaminationRecord(
-            student_id=student.id, level="matric", board=data["matric_board"],
-            examination_year=data["matric_year"], total_marks=data["matric_total"],
-            obtained_marks=data["matric_obtained"], grade=data.get("matric_grade"),
-        ))
-    if data.get("inter_total") is not None:
-        db.add(BoardExaminationRecord(
-            student_id=student.id, level="inter_part1", board=data["inter_board"],
-            examination_year=data["inter_year"], total_marks=data["inter_total"],
-            obtained_marks=data["inter_obtained"], grade=data.get("inter_grade"),
-        ))
+        # Board records
+        if data.get("matric_total") is not None:
+            pct = percentage_for(data["matric_obtained"], data["matric_total"])
+            db.add(BoardExaminationRecord(
+                student_id=student.id, level="matric", board=data["matric_board"],
+                examination_year=data["matric_year"], total_marks=data["matric_total"],
+                obtained_marks=data["matric_obtained"], grade=data.get("matric_grade"),
+            ))
+        if data.get("inter_total") is not None:
+            db.add(BoardExaminationRecord(
+                student_id=student.id, level="inter_part1", board=data["inter_board"],
+                examination_year=data["inter_year"], total_marks=data["inter_total"],
+                obtained_marks=data["inter_obtained"], grade=data.get("inter_grade"),
+            ))
 
-    await record_audit(
-        db, actor_id=actor.id, actor_role=actor.role,
-        action="student.create", resource_type="student", resource_id=student.id,
-        after={"admission_number": admission_no, "email": email},
-    )
-    await db.commit()
+        await record_audit(
+            db, actor_id=actor.id, actor_role=actor.role,
+            action="student.create", resource_type="student", resource_id=student.id,
+            after={"admission_number": admission_no, "email": email},
+        )
+        await db.commit()
+    except IntegrityError as exc:
+        # Duplicate (academic_session_id, roll_number) or (student_id,
+        # academic_session_id): a concurrent create in the same session raced
+        # past the advisory lock (or the backend has no advisory lock). The DB
+        # constraint is the final authority; surface a clean conflict, not a 500.
+        await db.rollback()
+        raise _enrolment_conflict(exc) from exc
     await db.refresh(student)
     return student
 
@@ -346,34 +376,61 @@ async def update_student(db: AsyncSession, actor: User, student: Student, data: 
                 StudentEnrolment.student_id == student.id, StudentEnrolment.is_active.is_(True)
             ))
             prev_enr = prev_active.scalar_one_or_none()
-            prev_class = prev_enr.class_id if prev_enr else None
-            prev_section = prev_enr.section_id if prev_enr else None
-            prev_session = prev_enr.academic_session_id if prev_enr else None
-            prev_roll = prev_enr.roll_number if prev_enr else None
-            if prev_enr:
-                prev_enr.is_active = False
 
-            roll = await _next_roll_number_for_section(
-                db, sess.id, sec.id, exclude_student_id=student.id,
+            same_session = (
+                prev_enr is not None
+                and str(prev_enr.academic_session_id) == str(sess.id)
             )
-            new_enr = StudentEnrolment(
-                student_id=student.id, academic_session_id=sess.id,
-                program_id=prog.id, class_id=cls.id,
-                section_id=sec.id, roll_number=roll, is_active=True,
-            )
-            db.add(new_enr)
-            await db.flush()
-            db.add(StudentAcademicHistory(
-                student_id=student.id, enrolment_id=new_enr.id,
-                previous_class=prev_class, previous_section=prev_section,
-                previous_session=prev_session, previous_roll_number=prev_roll,
-                action="section_change", note="Placement updated via student edit",
-            ))
-            student.current_program_id = prog.id
-            student.current_class_id = cls.id
-            student.current_section_id = sec.id
-            student.current_session_id = sess.id
-            student.current_roll_number = roll
+            try:
+                if same_session:
+                    # Same-session placement change: a student has only ONE
+                    # enrolment per session, so update the existing row in place
+                    # (program/class/section) instead of creating a second row.
+                    # The roll number is session-unique and stays with the student.
+                    prev_enr.program_id = prog.id
+                    prev_enr.class_id = cls.id
+                    prev_enr.section_id = sec.id
+                    await db.flush()
+                    student.current_program_id = prog.id
+                    student.current_class_id = cls.id
+                    student.current_section_id = sec.id
+                    student.current_session_id = sess.id
+                    # current_roll_number unchanged (still synced with prev_enr).
+                else:
+                    # Different-session change: deactivate the old enrolment (kept
+                    # for history — it is in a DIFFERENT session, so no
+                    # student+session conflict), create a new enrolment + history
+                    # snapshot pointing at it.
+                    prev_class = prev_enr.class_id if prev_enr else None
+                    prev_section = prev_enr.section_id if prev_enr else None
+                    prev_session = prev_enr.academic_session_id if prev_enr else None
+                    prev_roll = prev_enr.roll_number if prev_enr else None
+                    if prev_enr:
+                        prev_enr.is_active = False
+                    roll = await _next_roll_number_for_session(
+                        db, sess.id, exclude_student_id=student.id,
+                    )
+                    new_enr = StudentEnrolment(
+                        student_id=student.id, academic_session_id=sess.id,
+                        program_id=prog.id, class_id=cls.id,
+                        section_id=sec.id, roll_number=roll, is_active=True,
+                    )
+                    db.add(new_enr)
+                    await db.flush()
+                    db.add(StudentAcademicHistory(
+                        student_id=student.id, enrolment_id=new_enr.id,
+                        previous_class=prev_class, previous_section=prev_section,
+                        previous_session=prev_session, previous_roll_number=prev_roll,
+                        action="section_change", note="Placement updated via student edit",
+                    ))
+                    student.current_program_id = prog.id
+                    student.current_class_id = cls.id
+                    student.current_section_id = sec.id
+                    student.current_session_id = sess.id
+                    student.current_roll_number = roll
+            except IntegrityError as exc:
+                await db.rollback()
+                raise _enrolment_conflict(exc) from exc
 
     await record_audit(
         db, actor_id=actor.id, actor_role=actor.role,
@@ -441,50 +498,81 @@ async def promote(db: AsyncSession, actor: User, data: dict[str, Any]) -> Studen
             raise ValidationError("Student is already enrolled in this placement; nothing to promote.")
 
     before = await snapshot(student)
-    prev_class = prev_enrolment.class_id if prev_enrolment else None
-    prev_section = prev_enrolment.section_id if prev_enrolment else None
-    prev_session = prev_enrolment.academic_session_id if prev_enrolment else None
-    prev_roll = prev_enrolment.roll_number if prev_enrolment else None
 
-    if prev_enrolment:
-        prev_enrolment.is_active = False
+    new_session_id = data["new_academic_session_id"]
+    new_class_id = data["new_class_id"]
+    new_section_id = data["new_section_id"]
+    new_program_id = data.get("new_program_id") or student.current_program_id
 
-    # Auto-assign the next roll number in the new (session, section). The
-    # student's own enrolments (including the one just deactivated above) are
-    # excluded so a repeat in the same section can keep the same roll.
-    new_roll = await _next_roll_number_for_section(
-        db, data["new_academic_session_id"], data["new_section_id"],
-        exclude_student_id=student.id,
+    # A student has only ONE enrolment per academic session. A placement change
+    # targeting the SAME session updates the existing enrolment in place; a
+    # change to a DIFFERENT session deactivates the old enrolment (kept for
+    # history) and creates a new one in the new session.
+    same_session = (
+        prev_enrolment is not None
+        and str(prev_enrolment.academic_session_id) == str(new_session_id)
     )
-    new_enrolment = StudentEnrolment(
-        student_id=student.id,
-        academic_session_id=data["new_academic_session_id"],
-        program_id=data.get("new_program_id") or student.current_program_id,
-        class_id=data["new_class_id"],
-        section_id=data["new_section_id"],
-        roll_number=new_roll,
-        is_active=True,
-    )
-    db.add(new_enrolment)
-    await db.flush()
 
-    history = StudentAcademicHistory(
-        student_id=student.id,
-        enrolment_id=new_enrolment.id,
-        previous_class=prev_class,
-        previous_section=prev_section,
-        previous_session=prev_session,
-        previous_roll_number=prev_roll,
-        action=data["action"],
-        note=data.get("note"),
-    )
-    db.add(history)
-
-    student.current_program_id = new_enrolment.program_id
-    student.current_class_id = new_enrolment.class_id
-    student.current_section_id = new_enrolment.section_id
-    student.current_session_id = new_enrolment.academic_session_id
-    student.current_roll_number = new_roll
+    try:
+        if same_session:
+            # Update the existing active enrolment in place. The roll number is
+            # session-unique and stays with the student (no reassignment). No
+            # new enrolment row + no new history row (the enrolment already has
+            # its one-to-one history snapshot, if any); the change is recorded in
+            # the audit log.
+            prev_enrolment.program_id = new_program_id
+            prev_enrolment.class_id = new_class_id
+            prev_enrolment.section_id = new_section_id
+            await db.flush()
+            student.current_program_id = new_program_id
+            student.current_class_id = new_class_id
+            student.current_section_id = new_section_id
+            student.current_session_id = new_session_id
+            # current_roll_number unchanged (still synced with prev_enrolment).
+        else:
+            # Different-session promotion: deactivate the old enrolment (kept for
+            # history — it is in a DIFFERENT session, so no student+session
+            # conflict), create a new enrolment in the new session, and write a
+            # history snapshot. The student's own enrolments are excluded from
+            # roll allocation so a repeat can keep the same roll if it is free.
+            prev_class = prev_enrolment.class_id if prev_enrolment else None
+            prev_section = prev_enrolment.section_id if prev_enrolment else None
+            prev_session = prev_enrolment.academic_session_id if prev_enrolment else None
+            prev_roll = prev_enrolment.roll_number if prev_enrolment else None
+            if prev_enrolment:
+                prev_enrolment.is_active = False
+            new_roll = await _next_roll_number_for_session(
+                db, new_session_id, exclude_student_id=student.id,
+            )
+            new_enrolment = StudentEnrolment(
+                student_id=student.id,
+                academic_session_id=new_session_id,
+                program_id=new_program_id,
+                class_id=new_class_id,
+                section_id=new_section_id,
+                roll_number=new_roll,
+                is_active=True,
+            )
+            db.add(new_enrolment)
+            await db.flush()
+            db.add(StudentAcademicHistory(
+                student_id=student.id,
+                enrolment_id=new_enrolment.id,
+                previous_class=prev_class,
+                previous_section=prev_section,
+                previous_session=prev_session,
+                previous_roll_number=prev_roll,
+                action=data["action"],
+                note=data.get("note"),
+            ))
+            student.current_program_id = new_enrolment.program_id
+            student.current_class_id = new_enrolment.class_id
+            student.current_section_id = new_enrolment.section_id
+            student.current_session_id = new_enrolment.academic_session_id
+            student.current_roll_number = new_roll
+    except IntegrityError as exc:
+        await db.rollback()
+        raise _enrolment_conflict(exc) from exc
 
     await record_audit(
         db, actor_id=actor.id, actor_role=actor.role,
