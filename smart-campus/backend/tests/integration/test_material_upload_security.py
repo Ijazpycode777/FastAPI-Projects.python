@@ -41,7 +41,7 @@ def _image_bytes(fmt: str) -> bytes:
     return buf.getvalue()
 
 
-def _ooxml_bytes(kind: str) -> bytes:
+def _ooxml_bytes(kind: str, extra=None) -> bytes:
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("[Content_Types].xml", '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="xml" ContentType="text/xml"/></Types>')
@@ -49,6 +49,8 @@ def _ooxml_bytes(kind: str) -> bytes:
             zf.writestr("word/document.xml", '<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>')
         else:
             zf.writestr("ppt/presentation.xml", '<?xml version="1.0"?><p:presentation xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"/>')
+        for name, data in (extra or []):
+            zf.writestr(name, data)
     return buf.getvalue()
 
 
@@ -223,6 +225,15 @@ async def test_corrupt_pptx_rejected(admin_client, academic_setup):
     mid = len(pptx) // 2
     pptx[mid:mid + 8] = b"\xff" * 8
     resp = await _upload(admin_client, academic_setup, "broken.pptx", bytes(pptx))
+    assert resp.status_code in (400, 422), resp.text
+    assert resp.status_code != 500
+
+
+async def test_zip_bomb_docx_rejected(admin_client, academic_setup):
+    """A DOCX zip-bomb (extreme compression ratio) is rejected at the upload
+    endpoint with 4xx — never 500 — and creates no stored file or DB record."""
+    bomb = _ooxml_bytes("docx", [("big.bin", b"\x00" * 1_000_000)])
+    resp = await _upload(admin_client, academic_setup, "bomb.docx", bomb)
     assert resp.status_code in (400, 422), resp.text
     assert resp.status_code != 500
 

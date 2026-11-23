@@ -1,7 +1,6 @@
 """Study materials: secure upload, authorized download, metadata persistence."""
 from __future__ import annotations
 
-import io
 import os
 import tempfile
 from typing import BinaryIO
@@ -17,7 +16,7 @@ from app.models.materials import StudyMaterial
 from app.models.people import Student
 from app.repositories.audit import record_audit
 from app.services.academic_service import teacher_assigned_to_class
-from app.services.file_validation import FileValidationError, validate_upload
+from app.services.file_validation import FileValidationError, validate_upload_path
 from app.services.storage import get_storage, make_storage_key
 
 # Chunk size for bounded upload reading. Small enough that a single read never
@@ -91,16 +90,18 @@ async def upload(
         #    reading, never holding more than a chunk in memory.
         tmp_path, size = await _read_bounded(file, max_bytes)
 
-        # 2. Verify the actual content BEFORE persisting anything. The temp
-        #    file is the source of truth; the browser-supplied MIME is ignored.
-        with open(tmp_path, "rb") as fh:
-            data = fh.read()
-        ext, mime = validate_upload(file.filename or "upload", data)
+        # 2. Verify the actual content BEFORE persisting anything, streaming
+        #    from the temp file — the whole upload is never held in memory. The
+        #    browser-supplied MIME is ignored; the type comes from the verified
+        #    content (and includes zip-bomb guards for DOCX/PPTX).
+        ext, mime = validate_upload_path(file.filename or "upload", tmp_path)
 
-        # 3. Persist the validated bytes to storage.
+        # 3. Persist by streaming the temp file to storage (chunked copy via
+        #    shutil.copyfileobj inside LocalStorage.save) — no full RAM load.
         storage = get_storage()
         storage_key = make_storage_key(file.filename or f"upload.{ext}")
-        storage.save(storage_key, io.BytesIO(data), mime)
+        with open(tmp_path, "rb") as fh:
+            storage.save(storage_key, fh, mime)
 
         # 4. Only after the file is safely stored do we create the DB record.
         #    The material is scoped to the selected class only (no subject or
