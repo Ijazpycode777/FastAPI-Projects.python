@@ -1,13 +1,62 @@
-"""File upload validation (pure logic) for study materials."""
+"""File upload validation (pure logic) for study materials.
+
+Server-side content verification — never trusts the browser-supplied MIME type
+or the file extension alone. Each allowed type is verified by parsing its
+actual bytes:
+
+* PDF  — parsed with ``pypdf`` (a real PDF parser) after the ``%PDF-`` header
+  check; a strict parse with at least one page is required.
+* PNG / JPEG / WEBP — decoded with Pillow (``Image.open`` + ``verify()``) and
+  the detected format is cross-checked against the declared extension.
+* DOCX / PPTX — verified as OOXML ZIP archives: must contain
+  ``[Content_Types].xml`` plus the type-specific required part
+  (``word/document.xml`` / ``ppt/presentation.xml``) and pass a CRC integrity
+  test of every entry.
+
+The MIME type is determined server-side from the verified extension and
+returned to the caller for storage + DB persistence. Mismatched extension /
+content, corrupt, malformed, empty and oversized files are rejected with
+``FileValidationError`` (mapped to HTTP 422 by the service) — never a 500.
+"""
 from __future__ import annotations
 
+import io
 import os
+import zipfile
 
 from app.core.config import settings
 
 
 class FileValidationError(Exception):
-    pass
+    """Raised for any upload that fails validation (bad extension, size,
+    content/extension mismatch, corrupt or malformed file)."""
+
+
+# Canonical, server-determined MIME type per verified extension. This is what
+# gets stored — never the browser-supplied Content-Type.
+EXTENSION_MIME = {
+    "pdf": "application/pdf",
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "png": "image/png",
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "webp": "image/webp",
+}
+
+# Required internal OOXML parts per Office extension. Both formats are ZIP
+# archives that must contain [Content_Types].xml plus their payload part.
+_OOXML_REQUIRED_PARTS = {
+    "docx": ("[Content_Types].xml", "word/document.xml"),
+    "pptx": ("[Content_Types].xml", "ppt/presentation.xml"),
+}
+
+# Pillow image format → set of extensions that legitimately describe it.
+_IMAGE_FORMAT_EXT = {
+    "png": {"png"},
+    "jpeg": {"jpg", "jpeg"},
+    "webp": {"webp"},
+}
 
 
 def normalize_extension(filename: str) -> str:
@@ -33,39 +82,110 @@ def validate_size(size_bytes: int, max_mb: int | None = None) -> None:
         raise FileValidationError(f"File exceeds the {max_mb} MB upload limit.")
 
 
-# Map allowed extensions to expected content-type prefixes for real sniffing.
-EXTENSION_CONTENT_TYPE_MAP = {
-    "pdf": "application/pdf",
-    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-    "png": "image/png",
-    "jpg": "image/jpeg",
-    "jpeg": "image/jpeg",
-    "webp": "image/webp",
-}
+# ---------------- per-type content verification ----------------
+
+def _verify_pdf(data: bytes) -> None:
+    """Reject anything that is not a parseable PDF.
+
+    The ``%PDF-`` header is checked first (cheap), then the bytes are handed to
+    ``pypdf`` in strict mode — a real parse that rejects truncated xref tables,
+    broken streams and missing EOF markers. A document with zero pages is also
+    rejected (a header-only file would otherwise pass).
+    """
+    if len(data) < 8 or not data.startswith(b"%PDF-"):
+        raise FileValidationError("File does not have a valid PDF header.")
+    try:
+        from pypdf import PdfReader
+    except ImportError as exc:  # pragma: no cover - environment guard
+        raise FileValidationError("PDF validation is unavailable on this server.") from exc
+    try:
+        reader = PdfReader(io.BytesIO(data), strict=True)
+        if len(reader.pages) == 0:
+            raise FileValidationError("PDF contains no pages.")
+    except FileValidationError:
+        raise
+    except Exception as exc:
+        # Any parse failure (PdfReadError, KeyError on xref, truncation, …)
+        # means the file is not a valid PDF — reject it.
+        raise FileValidationError("File is not a valid or parseable PDF.") from exc
 
 
-def validate_content_type(filename: str, detected_content_type: str) -> None:
-    """Cross-check the sniffed content type against the declared extension."""
-    ext = normalize_extension(filename)
-    expected = EXTENSION_CONTENT_TYPE_MAP.get(ext)
-    if expected is None:
-        return  # unknown but extension already validated
-    if detected_content_type.lower() != expected.lower():
-        # Some sniffers report 'application/zip' for docx/pptx (they are zip).
-        if ext in ("docx", "pptx") and detected_content_type.lower() in (
-            "application/zip",
-            "application/octet-stream",
-        ):
-            return
+def _verify_image(data: bytes, ext: str) -> None:
+    """Decode with Pillow and cross-check the detected format against the
+    declared extension. ``verify()`` checks the pixel/stream integrity, so
+    truncated or corrupt images are rejected."""
+    try:
+        from PIL import Image, UnidentifiedImageError
+    except ImportError as exc:  # pragma: no cover - Pillow is a pinned dep
+        raise FileValidationError("Image validation is unavailable on this server.") from exc
+    try:
+        img = Image.open(io.BytesIO(data))
+        fmt = (img.format or "").lower()
+        img.verify()  # raises if the image stream is corrupt
+    except FileValidationError:
+        raise
+    except (UnidentifiedImageError, Exception) as exc:
+        raise FileValidationError("File is not a valid or supported image.") from exc
+    expected_exts = _IMAGE_FORMAT_EXT.get(fmt)
+    if expected_exts is None:
+        raise FileValidationError(f"Unsupported image format '{fmt or 'unknown'}'.")
+    if ext not in expected_exts:
         raise FileValidationError(
-            f"Content-Type '{detected_content_type}' does not match extension '.{ext}'."
+            f"Image content is {fmt.upper()} but the extension is '.{ext}'."
         )
 
 
-def validate_upload(filename: str, size_bytes: int, detected_content_type: str) -> str:
-    """Run all checks; return the validated extension."""
+def _verify_ooxml(data: bytes, ext: str) -> None:
+    """Verify a DOCX/PPTX is a well-formed OOXML package: a ZIP archive
+    containing ``[Content_Types].xml`` and the type-specific payload part, with
+    every entry passing its CRC check."""
+    required = _OOXML_REQUIRED_PARTS[ext]
+    try:
+        zf = zipfile.ZipFile(io.BytesIO(data))
+        names = set(zf.namelist())
+    except zipfile.BadZipFile as exc:
+        raise FileValidationError(f"File is not a valid .{ext} (not a ZIP archive).") from exc
+    missing = [part for part in required if part not in names]
+    if missing:
+        raise FileValidationError(
+            f"File is not a valid .{ext} (missing {', '.join(missing)})."
+        )
+    # testzip() returns the name of the first entry whose CRC fails, or None.
+    # A corrupt compressed stream can also raise (zlib.error / BadZipFile) —
+    # treat any such failure as a corrupt document.
+    try:
+        bad = zf.testzip()
+    except Exception as exc:
+        raise FileValidationError(f"File is corrupt (.{ext} archive failed integrity check).") from exc
+    if bad is not None:
+        raise FileValidationError(f"File is corrupt (ZIP entry '{bad}' failed CRC).")
+
+
+def validate_content(data: bytes, ext: str) -> str:
+    """Verify the actual byte content matches the declared extension.
+
+    Returns the server-determined MIME type. Raises ``FileValidationError`` on
+    any mismatch, corruption, or unsupported format — never returns for an
+    invalid file."""
+    if ext == "pdf":
+        _verify_pdf(data)
+    elif ext in ("png", "jpg", "jpeg", "webp"):
+        _verify_image(data, ext)
+    elif ext in ("docx", "pptx"):
+        _verify_ooxml(data, ext)
+    else:  # pragma: no cover - extension was already allowlisted
+        raise FileValidationError(f"No content verifier for '.{ext}'.")
+    return EXTENSION_MIME[ext]
+
+
+def validate_upload(filename: str, data: bytes, *, max_mb: int | None = None) -> tuple[str, str]:
+    """Run all checks: extension allowlist, size, and real content verification.
+
+    Returns ``(extension, server_determined_mime)``. The browser-supplied
+    Content-Type is deliberately ignored — the MIME is derived from the
+    verified content.
+    """
     ext = validate_extension(filename)
-    validate_size(size_bytes)
-    validate_content_type(filename, detected_content_type)
-    return ext
+    validate_size(len(data), max_mb)
+    mime = validate_content(data, ext)
+    return ext, mime
