@@ -258,3 +258,39 @@ async def test_promote_preserves_history(admin_client, academic_setup, db):
         StudentAcademicHistory.enrolment_id == active[0].id))).scalars().all()
     assert len(history) == 1
     assert history[0].previous_session is not None
+
+
+async def test_same_session_section_change_updates_enrolment_in_place(
+    admin_client, academic_setup, db
+):
+    """Changing a student's section WITHIN the same session updates the existing
+    enrolment row in place — it does NOT create a second enrolment (which would
+    violate one-enrolment-per-session) and does NOT change the roll number."""
+    create = await admin_client.post("/api/v1/students", json=_create_student_payload(
+        academic_setup, "sec.a@test.edu", academic_setup["section_name"]))
+    assert create.status_code == 200, create.text
+    sid = create.json()["id"]
+
+    # Create section B in the same class.
+    resp = await admin_client.post("/api/v1/sections", json={
+        "class_level_id": academic_setup["class_id"], "name": "B", "capacity": 40,
+    })
+    assert resp.status_code == 200, resp.text
+    sec_b_id = resp.json()["id"]
+
+    # Move the student to section B, SAME session.
+    resp = await admin_client.patch(f"/api/v1/students/{sid}", json={
+        "program": academic_setup["program_name"], "class_name": academic_setup["class_name"],
+        "section": "B", "academic_session": academic_setup["session_name"],
+    })
+    assert resp.status_code == 200, resp.text
+
+    # Query fresh (no pre-loaded enrolment in the db identity map). The student
+    # was the only one created in this per-test session, so its roll is 1.
+    enrolments = (await db.execute(select(StudentEnrolment).where(
+        StudentEnrolment.student_id == sid))).scalars().all()
+    assert len(enrolments) == 1, (
+        f"same-session change must update in place, got {len(enrolments)} enrolment(s)")
+    assert enrolments[0].is_active is True
+    assert enrolments[0].section_id == sec_b_id        # moved to section B
+    assert enrolments[0].roll_number == 1              # roll preserved (session-unique)

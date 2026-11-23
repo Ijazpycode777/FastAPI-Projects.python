@@ -6,40 +6,49 @@ Create Date: 2026-11-23
 
 Three coordinated data-integrity changes required by the Smart Campus spec:
 
-1. Roll numbers are unique across the ENTIRE academic session, not per section.
+1. Roll numbers are unique across the ENTIRE academic session, not per section:
    ``UNIQUE(academic_session_id, section_id, roll_number)`` is replaced by
-   ``UNIQUE(academic_session_id, roll_number)``. Existing duplicate
-   (session, roll) rows — possible because rolls used to be scoped per section,
-   so the same roll could legitimately appear in different sections of one
-   session — are resolved deterministically by renumbering: in each duplicate
-   group the earliest row keeps its roll and each later row moves to the
-   smallest unused roll in the session. No enrolment is deleted and no student
-   loses a roll except a conflicting duplicate.
+   ``UNIQUE(academic_session_id, roll_number)``. The same roll may be reused in
+   a different session.
 
 2. A student has at most one enrolment per academic session:
-   ``UNIQUE(student_id, academic_session_id)``. Existing same-session
-   duplicates — artifacts of the old promote logic, which created a second
-   enrolment row for a same-session section change — are resolved by keeping
-   the active / most-recent enrolment and removing the older same-session
-   duplicate(s) (and their history rows). Past-session enrolments are NEVER
-   touched; only same-session duplicates are removed.
+   ``UNIQUE(student_id, academic_session_id)``.
 
 3. ``student_academic_history.enrolment_id`` is unique (the relationship is
-   already declared one-to-one). Duplicate history rows per enrolment, if any,
-   are resolved by keeping the most recent.
+   already declared one-to-one): ``UNIQUE(enrolment_id)``.
 
-After the renumbering, ``students.current_roll_number`` is re-synced with the
-active enrolment's roll. Every data change is logged via the migration logger.
+DATA-PRESERVATION POLICY (this migration never deletes or silently rewrites
+existing student data):
+
+* Existing student enrolments and academic-history records are NEVER deleted.
+* Manually-assigned roll numbers are NEVER silently renumbered.
+* Before adding any constraint, the migration VALIDATES the existing data. If
+  any rows would violate a new constraint (a student with several enrolments in
+  one session; the same roll number used by two enrolments in one session; or
+  two history rows for one enrolment), the migration STOPS with a clear report
+  that identifies every conflicting record (table, ids, session, roll). No data
+  is modified. An administrator resolves the listed conflicts manually (e.g. by
+  moving a misplaced enrolment to the correct session, or reassigning a
+  duplicate roll), then re-runs ``alembic upgrade head``.
+* There is no safe automatic reconciliation for these conflicts: keeping both
+  rows would violate the new constraint, and choosing which row to keep would
+  silently discard historical enrolments or manually-assigned rolls. So the
+  migration refuses rather than guess.
+
+Only when the data is clean does the migration drop the obsolete
+``uq_enrolment_session_section_roll`` constraint (and the now-redundant
+``ix_enrolment_student_session`` index) and add the three new constraints.
 
 Fully idempotent and guarded (every op checks ``sa.inspect`` first), so it
 applies cleanly to:
   * a fresh database — 0001's ``create_all`` already built the new-model
-    constraints, so 0008 resolves zero rows and skips every constraint op; and
-  * an existing database at 0007 — old constraints are present, duplicates (if
-    any) are resolved, old constraints dropped, new constraints added.
+    constraints, so 0008 validates zero rows and skips every constraint op; and
+  * an existing database at 0007 — old constraints are present; if the data is
+    clean they are swapped for the new ones; if not, the migration aborts with a
+    report and leaves everything untouched.
 
 Downgrade is not supported: it would remove constraints the application depends
-on and undo an irreversible data renumbering / duplicate removal.
+on.
 """
 from __future__ import annotations
 
@@ -77,6 +86,79 @@ def _has_index(inspector, table: str, name: str) -> bool:
         return False
 
 
+def _validate_data(bind) -> list[str]:
+    """Return a list of human-readable conflict descriptions. Empty list means
+    the existing data satisfies all three new constraints and the migration may
+    proceed. Uses portable SQL (no GROUP_CONCAT/STRING_AGG) so it runs on both
+    SQLite and PostgreSQL."""
+    conflicts: list[str] = []
+
+    # 1. Duplicate (student_id, academic_session_id): a student with several
+    #    enrolments in one session. There is no safe automatic reconciliation
+    #    (keeping both rows violates the new constraint), so this is fatal.
+    ss_keys = bind.execute(sa.text(
+        "SELECT student_id, academic_session_id, COUNT(*) AS n "
+        "FROM student_enrolments "
+        "GROUP BY student_id, academic_session_id "
+        "HAVING COUNT(*) > 1"
+    )).all()
+    for student_id, session_id, n in ss_keys:
+        ids = [r[0] for r in bind.execute(sa.text(
+            "SELECT id FROM student_enrolments "
+            "WHERE student_id = :st AND academic_session_id = :se "
+            "ORDER BY id"
+        ), {"st": student_id, "se": session_id}).all()]
+        conflicts.append(
+            f"student_enrolments: student {student_id} has {n} enrolments in "
+            f"academic_session {session_id} (enrolment ids {ids}); at most one "
+            f"enrolment per (student, academic_session) is allowed."
+        )
+
+    # 2. Duplicate (academic_session_id, roll_number): the same roll number used
+    #    by two enrolments in one session (e.g. in different sections, classes
+    #    or programs). Roll numbers are manually assigned; we never renumber
+    #    them silently, so this is fatal.
+    roll_keys = bind.execute(sa.text(
+        "SELECT academic_session_id, roll_number, COUNT(*) AS n "
+        "FROM student_enrolments "
+        "GROUP BY academic_session_id, roll_number "
+        "HAVING COUNT(*) > 1"
+    )).all()
+    for session_id, roll, n in roll_keys:
+        ids = [r[0] for r in bind.execute(sa.text(
+            "SELECT id FROM student_enrolments "
+            "WHERE academic_session_id = :s AND roll_number = :r "
+            "ORDER BY id"
+        ), {"s": session_id, "r": roll}).all()]
+        conflicts.append(
+            f"student_enrolments: roll number {roll} is used by {n} enrolments "
+            f"in academic_session {session_id} (enrolment ids {ids}); roll "
+            f"numbers must be unique across the entire session."
+        )
+
+    # 3. Duplicate enrolment_id in student_academic_history: two history
+    #    snapshots for one enrolment. The one-to-one relationship allows one.
+    if _has_table(sa.inspect(bind), "student_academic_history"):
+        hist_keys = bind.execute(sa.text(
+            "SELECT enrolment_id, COUNT(*) AS n "
+            "FROM student_academic_history "
+            "GROUP BY enrolment_id "
+            "HAVING COUNT(*) > 1"
+        )).all()
+        for eid, n in hist_keys:
+            ids = [r[0] for r in bind.execute(sa.text(
+                "SELECT id FROM student_academic_history "
+                "WHERE enrolment_id = :eid ORDER BY id"
+            ), {"eid": eid}).all()]
+            conflicts.append(
+                f"student_academic_history: enrolment {eid} has {n} history rows "
+                f"(history ids {ids}); at most one history row per enrolment is "
+                f"allowed (one-to-one)."
+            )
+
+    return conflicts
+
+
 def upgrade():
     bind = op.get_bind()
     inspector = sa.inspect(bind)
@@ -84,126 +166,28 @@ def upgrade():
     if not _has_table(inspector, "student_enrolments"):
         return
 
-    # ---- 1. Resolve duplicate (student_id, academic_session_id) rows. ----
-    # The new UNIQUE(student_id, academic_session_id) forbids two enrolments for
-    # the same student in the same session. The old promote logic could create
-    # these (a same-session section change deactivated the old enrolment and
-    # inserted a new one in the same session). Keep the best row per
-    # (student, session) — prefer is_active, then most recent — and remove the
-    # older same-session duplicate(s). Past-session enrolments are NEVER touched.
-    ss_groups = bind.execute(sa.text(
-        "SELECT student_id, academic_session_id FROM student_enrolments "
-        "GROUP BY student_id, academic_session_id HAVING COUNT(*) > 1"
-    )).all()
-    removed_enrolments = 0
-    removed_history = 0
-    for student_id, session_id in ss_groups:
-        rows = bind.execute(sa.text(
-            "SELECT id FROM student_enrolments "
-            "WHERE student_id = :st AND academic_session_id = :se "
-            "ORDER BY is_active DESC, created_at DESC, id"
-        ), {"st": student_id, "se": session_id}).all()
-        keep_id = rows[0][0]
-        for (rid,) in rows[1:]:
-            # Remove this enrolment's history rows first (explicit; do not rely
-            # on a FK cascade, which SQLite does not enforce without a pragma).
-            dh = bind.execute(sa.text(
-                "DELETE FROM student_academic_history WHERE enrolment_id = :id"
-            ), {"id": rid})
-            removed_history += dh.rowcount or 0
-            bind.execute(sa.text(
-                "DELETE FROM student_enrolments WHERE id = :id"
-            ), {"id": rid})
-            removed_enrolments += 1
-            log.info(
-                "0008: removed same-session duplicate enrolment %s "
-                "(student %s, session %s); kept enrolment %s",
-                rid, student_id, session_id, keep_id,
-            )
-    log.info(
-        "0008: removed %d same-session duplicate enrolment(s) and %d history row(s)",
-        removed_enrolments, removed_history,
-    )
+    # ---- 1. VALIDATE existing data before touching any constraints. ----
+    conflicts = _validate_data(bind)
+    if conflicts:
+        report = "\n".join(f"  - {c}" for c in conflicts)
+        log.error("0008: migration ABORTED — %d unresolved data conflict(s):\n%s",
+                  len(conflicts), report)
+        raise RuntimeError(
+            "Migration 0008_roll_session_unique aborted: "
+            f"{len(conflicts)} data conflict(s) prevent adding the new unique "
+            "constraints. NO data was modified — no enrolment or academic-history "
+            "row was deleted and no roll number was changed. Resolve the "
+            "conflicts listed below manually (move a misplaced enrolment to the "
+            "correct session, reassign a duplicate roll, or remove a duplicate "
+            "history row), then re-run `alembic upgrade head`.\n\nConflicts:\n"
+            f"{report}"
+        )
 
-    # ---- 2. Resolve duplicate enrolment_id in student_academic_history. ----
-    # The new UNIQUE(enrolment_id) requires at most one history row per
-    # enrolment. Keep the most recent; remove older duplicates.
-    if _has_table(inspector, "student_academic_history"):
-        hist_groups = bind.execute(sa.text(
-            "SELECT enrolment_id FROM student_academic_history "
-            "GROUP BY enrolment_id HAVING COUNT(*) > 1"
-        )).all()
-        removed_hist_dups = 0
-        for (eid,) in hist_groups:
-            rows = bind.execute(sa.text(
-                "SELECT id FROM student_academic_history WHERE enrolment_id = :eid "
-                "ORDER BY created_at DESC, id"
-            ), {"eid": eid}).all()
-            for (hid,) in rows[1:]:
-                bind.execute(sa.text(
-                    "DELETE FROM student_academic_history WHERE id = :id"
-                ), {"id": hid})
-                removed_hist_dups += 1
-                log.info(
-                    "0008: removed duplicate history row %s for enrolment %s", hid, eid)
-        log.info("0008: removed %d duplicate history row(s)", removed_hist_dups)
-
-    # ---- 3. Renumber duplicate (academic_session_id, roll_number) rows. ----
-    # Rolls are now session-wide unique. Existing duplicates (rolls used to be
-    # per-section) are resolved by keeping the earliest row's roll and moving
-    # each later row to the smallest unused roll in the session. No enrolment is
-    # deleted; no student loses a roll except a conflicting duplicate.
-    roll_groups = bind.execute(sa.text(
-        "SELECT academic_session_id, roll_number FROM student_enrolments "
-        "GROUP BY academic_session_id, roll_number HAVING COUNT(*) > 1"
-    )).all()
-    renumbered = 0
-    for session_id, dup_roll in roll_groups:
-        rows = bind.execute(sa.text(
-            "SELECT id, student_id FROM student_enrolments "
-            "WHERE academic_session_id = :s AND roll_number = :r "
-            "ORDER BY created_at, id"
-        ), {"s": session_id, "r": dup_roll}).all()
-        for (rid, student_id) in rows[1:]:
-            taken = {t[0] for t in bind.execute(sa.text(
-                "SELECT roll_number FROM student_enrolments WHERE academic_session_id = :s"
-            ), {"s": session_id}).all()}
-            candidate = 1
-            while candidate in taken:
-                candidate += 1
-            bind.execute(sa.text(
-                "UPDATE student_enrolments SET roll_number = :r WHERE id = :id"
-            ), {"r": candidate, "id": rid})
-            renumbered += 1
-            log.info(
-                "0008: renumbered enrolment %s (student %s) in session %s: roll %s -> %s",
-                rid, student_id, session_id, dup_roll, candidate)
-    log.info("0008: renumbered %d duplicate roll-number row(s)", renumbered)
-
-    # ---- 4. Sync students.current_roll_number with the active enrolment. ----
-    sync = bind.execute(sa.text(
-        "UPDATE students SET current_roll_number = ("
-        "  SELECT se.roll_number FROM student_enrolments se"
-        "  WHERE se.student_id = students.id AND se.is_active"
-        "  ORDER BY se.created_at DESC LIMIT 1"
-        ") WHERE EXISTS ("
-        "  SELECT 1 FROM student_enrolments se"
-        "  WHERE se.student_id = students.id AND se.is_active"
-        ")"
-    ))
-    log.info(
-        "0008: synced %s students.current_roll_number row(s) with the active enrolment",
-        sync.rowcount or 0,
-    )
-
-    # Re-inspect so the guarded constraint ops below see current DB state.
-    inspector = sa.inspect(bind)
-
-    # ---- 5. Drop obsolete objects. ----
-    # The old (session, section, roll) unique is superseded by the session-wide
-    # (session, roll) unique. The (student, session) index is now redundant with
-    # the new UNIQUE(student_id, academic_session_id) constraint (which creates
-    # its own index).
+    # ---- 2. Data is clean: apply the constraints. No rows are modified. ----
+    # Drop the obsolete (session, section, roll) unique — superseded by the
+    # session-wide (session, roll) unique. Drop the now-redundant (student,
+    # session) index — the new UNIQUE(student_id, academic_session_id) creates
+    # its own index.
     if _has_uq(inspector, "student_enrolments", "uq_enrolment_session_section_roll"):
         with op.batch_alter_table("student_enrolments") as b:
             b.drop_constraint("uq_enrolment_session_section_roll", type_="unique")
@@ -211,7 +195,9 @@ def upgrade():
         with op.batch_alter_table("student_enrolments") as b:
             b.drop_index("ix_enrolment_student_session")
 
-    # ---- 6. Add the new authoritative constraints (guarded). ----
+    # Add the new authoritative constraints (guarded — already present on a
+    # fresh database built by 0001's create_all with the current models).
+    inspector = sa.inspect(bind)
     if not _has_uq(inspector, "student_enrolments", "uq_enrolment_session_roll"):
         with op.batch_alter_table("student_enrolments") as b:
             b.create_unique_constraint(
@@ -231,12 +217,12 @@ def upgrade():
                 "uq_academic_history_enrolment",
                 ["enrolment_id"],
             )
+    log.info("0008: data validated clean; new unique constraints applied.")
 
 
 def downgrade():
     raise NotImplementedError(
         "Downgrade from 0008_roll_session_unique is not supported: it would "
         "remove roll-uniqueness and one-enrolment-per-session constraints the "
-        "application depends on, and undo an irreversible data renumbering / "
-        "duplicate removal."
+        "application depends on."
     )
