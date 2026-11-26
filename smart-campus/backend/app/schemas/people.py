@@ -54,6 +54,10 @@ class TeacherUpdateIn(BaseModel):
     subject: str | None = Field(default=None, min_length=1, max_length=120)
     designation: str | None = None
     employment_status: str | None = None
+    # Admin-set password on edit. Optional: omit (or send null) to keep the
+    # current password; when present it is hashed and applied directly to the
+    # linked user (the admin chooses the credential — no temporary/reset flow).
+    password: str | None = Field(default=None, min_length=10, max_length=128)
 
     @field_validator("subject")
     @classmethod
@@ -89,14 +93,14 @@ class StudentCreateIn(BaseModel):
     date_of_birth: date | None = None
     gender: str | None = Field(default=None, pattern="^(male|female|other)$")
     admission_date: date
-    # Free-text placement: the admin types names (like a username — no fixed
-    # dropdown values). The service find-or-creates the underlying
-    # program/class/section/session rows so attendance, timetable and marks
-    # (which join on the real foreign keys) keep working.
-    program: str = Field(min_length=1, max_length=120)
-    class_name: str = Field(min_length=1, max_length=60)
-    section: str = Field(min_length=1, max_length=16)
-    academic_session: str = Field(min_length=1, max_length=40)
+    # Placement: the admin selects canonical academic rows by ID (managed on the
+    # Classes Distribution page). The service validates foreign-key consistency
+    # (class belongs to program, section belongs to class) — no free text, so
+    # two students in "PB 21" always share the same class row.
+    program_id: str = Field(min_length=1)
+    class_id: str = Field(min_length=1)
+    section_id: str = Field(min_length=1)
+    academic_session_id: str = Field(min_length=1)
     password: str = Field(min_length=10, max_length=128)
     guardian: GuardianIn | None = None
     # Optional prior board records captured at admission
@@ -131,12 +135,17 @@ class StudentUpdateIn(BaseModel):
     date_of_birth: date | None = None
     gender: str | None = Field(default=None, pattern="^(male|female|other)$")
     account_status: str | None = Field(default=None, pattern="^(active|inactive|graduated|left|suspended)$")
-    # Free-text placement (optional). If any of these is set, the service
-    # find-or-creates the resolved rows and updates the student's placement.
-    program: str | None = Field(default=None, min_length=1, max_length=120)
-    class_name: str | None = Field(default=None, min_length=1, max_length=60)
-    section: str | None = Field(default=None, min_length=1, max_length=16)
-    academic_session: str | None = Field(default=None, min_length=1, max_length=40)
+    # Placement (optional). If any is set, ALL four must be set together; the
+    # service validates the rows exist and are consistent, then updates the
+    # student's enrolment (preserving history on a real change).
+    program_id: str | None = Field(default=None, min_length=1)
+    class_id: str | None = Field(default=None, min_length=1)
+    section_id: str | None = Field(default=None, min_length=1)
+    academic_session_id: str | None = Field(default=None, min_length=1)
+    # Admin-set password on edit. Optional: omit (or send null) to keep the
+    # current password; when present it is hashed and applied directly to the
+    # linked user (the admin chooses the credential — no temporary/reset flow).
+    password: str | None = Field(default=None, min_length=10, max_length=128)
 
 
 class StudentOut(ORMBase):

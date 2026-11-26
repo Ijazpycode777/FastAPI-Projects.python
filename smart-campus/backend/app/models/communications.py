@@ -19,6 +19,22 @@ class Notice(UUIDPK, TimestampMixin, Base):
             f"target_audience IN {sql_in(AUDIENCES)}",
             name="notice_audience_check",
         ),
+        # D14: target_audience must agree with which targeting FK is set.
+        #   program  -> program_id set, class_id/section_id null
+        #   class    -> class_id set, section_id null (program_id optional)
+        #   section  -> class_id + section_id set
+        #   all/admins/teachers/students -> all three targeting FKs null
+        CheckConstraint(
+            "(target_audience = 'program' AND program_id IS NOT NULL "
+            "  AND class_id IS NULL AND section_id IS NULL) "
+            "OR (target_audience = 'class' AND class_id IS NOT NULL "
+            "  AND section_id IS NULL) "
+            "OR (target_audience = 'section' AND class_id IS NOT NULL "
+            "  AND section_id IS NOT NULL) "
+            "OR (target_audience IN ('all','admins','teachers','students') "
+            "  AND program_id IS NULL AND class_id IS NULL AND section_id IS NULL)",
+            name="notice_audience_target_consistency_check",
+        ),
         Index("ix_notice_target", "target_audience"),
         Index("ix_notice_published", "published_at"),
     )
@@ -29,7 +45,7 @@ class Notice(UUIDPK, TimestampMixin, Base):
         String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    target_audience: Mapped[str] = mapped_column(String(16), nullable=False, default="all")
+    target_audience: Mapped[str] = mapped_column(String(16), nullable=False, default="all", server_default="all")
     program_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("programs.id", ondelete="SET NULL"), nullable=True
     )
@@ -40,7 +56,7 @@ class Notice(UUIDPK, TimestampMixin, Base):
         String(36), ForeignKey("sections.id", ondelete="SET NULL"), nullable=True
     )
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    is_pinned: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_pinned: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", nullable=False)
 
     publisher = relationship("User")
 

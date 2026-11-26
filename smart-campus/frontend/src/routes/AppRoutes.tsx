@@ -36,8 +36,10 @@ const FeeListPage = lazy(() => import("@/features/fees/FeeListPage").then((m) =>
 const InvoiceDetailPage = lazy(() => import("@/features/fees/InvoiceDetailPage").then((m) => ({ default: m.InvoiceDetailPage })));
 const TimetablePage = lazy(() => import("@/features/timetable/TimetablePage").then((m) => ({ default: m.TimetablePage })));
 const MaterialsPage = lazy(() => import("@/features/materials/MaterialsPage").then((m) => ({ default: m.MaterialsPage })));
+const ClassesDistributionPage = lazy(() => import("@/features/academic/ClassesDistributionPage").then((m) => ({ default: m.ClassesDistributionPage })));
 const NoticesPage = lazy(() => import("@/features/notices/NoticesPage").then((m) => ({ default: m.NoticesPage })));
 const ReportsPage = lazy(() => import("@/features/reports/ReportsPage").then((m) => ({ default: m.ReportsPage })));
+const AdminListPage = lazy(() => import("@/features/admin/AdminListPage").then((m) => ({ default: m.AdminListPage })));
 
 function HomeRedirect() {
   const { profile, loading } = useAuth();
@@ -89,6 +91,9 @@ export function AppRoutes() {
           <Route path="teachers/:id" element={<Protected roles={["admin"]}><TeacherDetailPage /></Protected>} />
           <Route path="teachers/:id/edit" element={<Protected roles={["admin"]}><TeacherFormPage /></Protected>} />
 
+          {/* Administrators (admin-only: create more admins) */}
+          <Route path="admins" element={<Protected roles={["admin"]}><AdminListPage /></Protected>} />
+
           {/* Attendance */}
           <Route path="attendance/mark" element={<Protected roles={["teacher"]}><AttendanceMarkingPage /></Protected>} />
           <Route path="attendance" element={<Protected><AttendanceHistoryPage /></Protected>} />
@@ -110,6 +115,9 @@ export function AppRoutes() {
           {/* Timetable, materials, notices, reports */}
           <Route path="timetable" element={<Protected><TimetablePage /></Protected>} />
           <Route path="materials" element={<Protected><MaterialsPage /></Protected>} />
+          {/* Academic structure management (admin only) — build classes/sections/subjects
+              before enrolling students, so placement is by canonical ID, not free text. */}
+          <Route path="classes" element={<Protected roles={["admin"]}><ClassesDistributionPage /></Protected>} />
           <Route path="notices" element={<Protected><NoticesPage /></Protected>} />
           <Route path="reports" element={<Protected roles={["admin", "teacher"]}><ReportsPage /></Protected>} />
         </Route>

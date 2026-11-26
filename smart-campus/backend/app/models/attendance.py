@@ -73,7 +73,7 @@ class AttendanceRecord(UUIDPK, TimestampMixin, Base):
         String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     marked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    is_finalized: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_finalized: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", nullable=False)
     note: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     student = relationship("Student", back_populates="attendance")
@@ -96,8 +96,8 @@ class TeacherAttendance(UUIDPK, TimestampMixin, Base):
     attendance_date: Mapped[date] = mapped_column(Date, nullable=False)
     check_in_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     check_out_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    status: Mapped[str] = mapped_column(String(12), nullable=False, default="absent")
-    work_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    status: Mapped[str] = mapped_column(String(12), nullable=False, default="absent", server_default="absent")
+    work_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     note: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     teacher = relationship("Teacher", back_populates="self_attendance")
@@ -136,7 +136,7 @@ class LeaveRecord(UUIDPK, TimestampMixin, Base):
         Index("ix_leave_student", "student_id", "status"),
     )
 
-    person_type: Mapped[str] = mapped_column(String(8), nullable=False, default="teacher")
+    person_type: Mapped[str] = mapped_column(String(8), nullable=False, default="teacher", server_default="teacher")
     student_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("students.id", ondelete="CASCADE"), nullable=True
     )
@@ -146,7 +146,7 @@ class LeaveRecord(UUIDPK, TimestampMixin, Base):
     start_date: Mapped[date] = mapped_column(Date, nullable=False)
     end_date: Mapped[date] = mapped_column(Date, nullable=False)
     reason: Mapped[str] = mapped_column(String(500), nullable=False)
-    status: Mapped[str] = mapped_column(String(12), nullable=False, default="pending")
+    status: Mapped[str] = mapped_column(String(12), nullable=False, default="pending", server_default="pending")
     approved_by: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )

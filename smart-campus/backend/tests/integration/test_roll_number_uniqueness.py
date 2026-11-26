@@ -160,13 +160,13 @@ async def test_history_enrolment_id_is_unique(db):
 # ---------------------------------------------------------------------------
 # Behavior tests via the API (service + endpoint paths).
 # ---------------------------------------------------------------------------
-def _create_student_payload(setup, email, section_name):
+def _create_student_payload(setup, email, section_id):
     return {
         "full_name": email.split("@")[0], "email": email, "phone": "+923000000000",
         "date_of_birth": "2007-03-15", "gender": "male",
         "admission_date": "2025-08-01",
-        "program": setup["program_name"], "class_name": setup["class_name"],
-        "section": section_name, "academic_session": setup["session_name"],
+        "program_id": setup["program_id"], "class_id": setup["class_id"],
+        "section_id": section_id, "academic_session_id": setup["session_id"],
         "password": "Student!2025",
     }
 
@@ -180,12 +180,13 @@ async def test_roll_generation_considers_entire_session(admin_client, academic_s
         "class_level_id": academic_setup["class_id"], "name": "B", "capacity": 40,
     })
     assert resp.status_code == 200, resp.text
+    section_b_id = resp.json()["id"]
 
     r1 = await admin_client.post("/api/v1/students", json=_create_student_payload(
-        academic_setup, "gen.a@test.edu", academic_setup["section_name"]))
+        academic_setup, "gen.a@test.edu", academic_setup["section_id"]))
     assert r1.status_code == 200, r1.text
     r2 = await admin_client.post("/api/v1/students", json=_create_student_payload(
-        academic_setup, "gen.b@test.edu", "B"))
+        academic_setup, "gen.b@test.edu", section_b_id))
     assert r2.status_code == 200, r2.text
 
     # The two students are in different sections of the same session. Their
@@ -214,7 +215,7 @@ async def test_roll_collision_returns_conflict_not_server_error(
 
     # Student 1 -> enrolment with roll 1 in the session.
     r1 = await admin_client.post("/api/v1/students", json=_create_student_payload(
-        academic_setup, "conflict.a@test.edu", academic_setup["section_name"]))
+        academic_setup, "conflict.a@test.edu", academic_setup["section_id"]))
     assert r1.status_code == 200, r1.text
 
     # Force the next create to pick the SAME roll (simulating a race). The DB
@@ -225,7 +226,7 @@ async def test_roll_collision_returns_conflict_not_server_error(
     monkeypatch.setattr(student_service, "_next_roll_number_for_session", _fixed_roll)
 
     r2 = await admin_client.post("/api/v1/students", json=_create_student_payload(
-        academic_setup, "conflict.b@test.edu", academic_setup["section_name"]))
+        academic_setup, "conflict.b@test.edu", academic_setup["section_id"]))
     assert r2.status_code == 409, r2.text
     assert "roll" in r2.json()["error"]["message"].lower()
 
@@ -234,14 +235,18 @@ async def test_promote_preserves_history(admin_client, academic_setup, db):
     """Promoting a student to a new session deactivates (never deletes) the old
     enrolment and writes a history snapshot — existing history is preserved."""
     create = await admin_client.post("/api/v1/students", json=_create_student_payload(
-        academic_setup, "hist.a@test.edu", academic_setup["section_name"]))
+        academic_setup, "hist.a@test.edu", academic_setup["section_id"]))
     assert create.status_code == 200, create.text
     sid = create.json()["id"]
 
-    # Move the student to a brand-new session via the edit endpoint.
+    # Create a brand-new session and move the student into it via the edit endpoint.
+    new_sess = await admin_client.post("/api/v1/sessions", json={
+        "name": "2026-2027", "start_date": "2026-08-01", "end_date": "2027-05-31", "is_active": False,
+    })
+    assert new_sess.status_code == 200, new_sess.text
     resp = await admin_client.patch(f"/api/v1/students/{sid}", json={
-        "program": academic_setup["program_name"], "class_name": academic_setup["class_name"],
-        "section": academic_setup["section_name"], "academic_session": "2026-2027",
+        "program_id": academic_setup["program_id"], "class_id": academic_setup["class_id"],
+        "section_id": academic_setup["section_id"], "academic_session_id": new_sess.json()["id"],
     })
     assert resp.status_code == 200, resp.text
 
@@ -267,7 +272,7 @@ async def test_same_session_section_change_updates_enrolment_in_place(
     enrolment row in place — it does NOT create a second enrolment (which would
     violate one-enrolment-per-session) and does NOT change the roll number."""
     create = await admin_client.post("/api/v1/students", json=_create_student_payload(
-        academic_setup, "sec.a@test.edu", academic_setup["section_name"]))
+        academic_setup, "sec.a@test.edu", academic_setup["section_id"]))
     assert create.status_code == 200, create.text
     sid = create.json()["id"]
 
@@ -280,8 +285,8 @@ async def test_same_session_section_change_updates_enrolment_in_place(
 
     # Move the student to section B, SAME session.
     resp = await admin_client.patch(f"/api/v1/students/{sid}", json={
-        "program": academic_setup["program_name"], "class_name": academic_setup["class_name"],
-        "section": "B", "academic_session": academic_setup["session_name"],
+        "program_id": academic_setup["program_id"], "class_id": academic_setup["class_id"],
+        "section_id": sec_b_id, "academic_session_id": academic_setup["session_id"],
     })
     assert resp.status_code == 200, resp.text
 

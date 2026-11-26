@@ -26,7 +26,7 @@ class AcademicSession(UUIDPK, TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(40), nullable=False)
     start_date: Mapped[date] = mapped_column(Date, nullable=False)
     end_date: Mapped[date] = mapped_column(Date, nullable=False)
-    is_active: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", nullable=False)
 
 
 class Program(UUIDPK, TimestampMixin, Base):
@@ -70,7 +70,7 @@ class Section(UUIDPK, TimestampMixin, Base):
         String(36), ForeignKey("class_levels.id", ondelete="CASCADE"), nullable=False
     )
     name: Mapped[str] = mapped_column(String(16), nullable=False)
-    capacity: Mapped[int] = mapped_column(Integer, nullable=False, default=40)
+    capacity: Mapped[int] = mapped_column(Integer, nullable=False, default=40, server_default="40")
 
     class_level = relationship("ClassLevel", back_populates="sections")
 
@@ -87,8 +87,8 @@ class Subject(UUIDPK, TimestampMixin, Base):
     )
     code: Mapped[str] = mapped_column(String(24), nullable=False)
     name: Mapped[str] = mapped_column(String(120), nullable=False)
-    theory_marks: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
-    practical_marks: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    theory_marks: Mapped[int] = mapped_column(Integer, nullable=False, default=100, server_default="100")
+    practical_marks: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
 
     program = relationship("Program", back_populates="subjects")
 

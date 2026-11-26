@@ -102,3 +102,55 @@ class AssignmentIn(BaseModel):
     class_id: str = Field(min_length=1)
     section_id: str | None = None
     academic_session_id: str = Field(min_length=1)
+
+
+# ---------------- Updates (rename / resize) ----------------
+class ProgramUpdateIn(BaseModel):
+    code: str | None = Field(default=None, min_length=1, max_length=16)
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    description: str | None = None
+
+
+class ClassLevelUpdateIn(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=60)
+    year: int | None = Field(default=None, ge=1, le=6)
+
+
+class SectionUpdateIn(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=16)
+    capacity: int | None = Field(default=None, ge=1, le=500)
+
+
+class SubjectUpdateIn(BaseModel):
+    code: str | None = Field(default=None, min_length=1, max_length=24)
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    theory_marks: int | None = Field(default=None, ge=0, le=1000)
+    practical_marks: int | None = Field(default=None, ge=0, le=1000)
+
+
+# ---------------- Classes Distribution (admin management view) ----------------
+class SubjectBrief(BaseModel):
+    id: str
+    code: str
+    name: str
+
+
+class SectionBrief(BaseModel):
+    id: str
+    name: str
+    capacity: int
+    enrolled: int
+
+
+class ClassDistributionOut(BaseModel):
+    """A class with its program, sections, designated subjects (the program's
+    subjects) and current enrolment counts. Powers the Classes Distribution page."""
+    id: str
+    program_id: str
+    program_name: str
+    program_code: str
+    name: str
+    year: int
+    enrolled: int
+    sections: list[SectionBrief]
+    subjects: list[SubjectBrief]

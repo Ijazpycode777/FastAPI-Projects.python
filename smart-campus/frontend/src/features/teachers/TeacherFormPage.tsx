@@ -30,6 +30,9 @@ const editSchema = z.object({
   subject: z.string().min(1, "Subject is required"),
   designation: z.string().min(1, "Required"),
   employment_status: z.string().min(1, "Required"),
+  // Optional on edit: an admin can set a new password directly from the form
+  // (hashed + applied on the backend). Leave blank to keep the current password.
+  password: z.union([z.string().min(10, "At least 10 characters"), z.literal("")]).optional(),
 });
 
 type CreateValues = z.infer<typeof createSchema>;
@@ -79,8 +82,9 @@ export function TeacherFormPage() {
     setSubmitting(true);
     try {
       if (isEdit && id) {
-        // Only send editable fields; email/employee_id/joining_date/password
-        // are immutable on update (password has its own reset flow).
+        // Only send editable fields; email/employee_id/joining_date are immutable
+        // on update. Password is optional — send it only when the admin typed a
+        // new one (it is hashed + applied directly on the backend).
         await http.patch(`/teachers/${id}`, {
           full_name: v.full_name,
           phone: v.phone || null,
@@ -88,6 +92,7 @@ export function TeacherFormPage() {
           subject: v.subject,
           designation: v.designation,
           employment_status: v.employment_status,
+          ...(v.password ? { password: v.password } : {}),
         });
         toast.success("Teacher updated");
         queryClient.invalidateQueries({ queryKey: ["teacher", id] });
@@ -156,11 +161,14 @@ export function TeacherFormPage() {
                 </Select>
               </Field>
             )}
-            {!isEdit && (
-              <Field label="Initial password" required error={errors.password?.message} hint="Min 10 chars, with upper/lower/digit/symbol.">
-                <TextInput type="text" {...register("password")} />
-              </Field>
-            )}
+            <Field
+              label={isEdit ? "New password" : "Initial password"}
+              required={!isEdit}
+              error={errors.password?.message}
+              hint={isEdit ? "Leave blank to keep the current password. Min 10 chars, with upper/lower/digit/symbol." : "Min 10 chars, with upper/lower/digit/symbol."}
+            >
+              <TextInput type="text" {...register("password")} />
+            </Field>
           </div>
         </Card>
         <div className="flex justify-end gap-2">

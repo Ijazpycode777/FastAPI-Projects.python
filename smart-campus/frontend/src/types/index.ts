@@ -67,6 +67,15 @@ export interface Section { id: string; class_level_id: string; name: string; cap
 export interface Subject { id: string; program_id: string; code: string; name: string; theory_marks: number; practical_marks: number; }
 export interface Department { id: string; name: string; }
 
+/** Aggregated class view for the Classes Distribution admin page. */
+export interface SubjectBrief { id: string; code: string; name: string; }
+export interface SectionBrief { id: string; name: string; capacity: number; enrolled: number; }
+export interface ClassDistribution {
+  id: string; program_id: string; program_name: string; program_code: string;
+  name: string; year: number; enrolled: number;
+  sections: SectionBrief[]; subjects: SubjectBrief[];
+}
+
 export interface TimetableEntry {
   id: string; day_of_week: string; start_time: string; end_time: string;
   subject_id: string; teacher_id: string; class_id: string; section_id?: string | null;

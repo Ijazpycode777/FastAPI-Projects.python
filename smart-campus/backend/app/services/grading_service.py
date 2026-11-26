@@ -5,11 +5,13 @@ from typing import Any
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import IntegrityError
 
 from app.core.exceptions import ConflictError, ValidationError
 from app.models.examinations import GradingBoundary, GradingPolicy
 from app.repositories.audit import record_audit
 from app.services.grading import Boundary, GradingError, next_version, validate_boundaries
+from app.utils.helpers import pg_advisory_xact_lock, stable_lock_key
 
 
 async def create_policy(db: AsyncSession, actor, name: str, description: str | None, raw: list[dict]) -> GradingPolicy:
@@ -23,6 +25,12 @@ async def create_policy(db: AsyncSession, actor, name: str, description: str | N
     except GradingError as exc:
         raise ValidationError(str(exc))
 
+    # D11: serialize version allocation per policy name so two concurrent
+    # create_policy calls with the same name cannot both read the same version
+    # list and pick the same version (which would collide on the
+    # uq_grading_policy_name_version unique constraint as an unhandled 500).
+    await pg_advisory_xact_lock(db, stable_lock_key("grading_policy", name))
+
     versions = (await db.execute(
         select(GradingPolicy.version).where(GradingPolicy.name == name)
     )).scalars().all()
@@ -30,7 +38,22 @@ async def create_policy(db: AsyncSession, actor, name: str, description: str | N
 
     policy = GradingPolicy(name=name, version=version, is_active=False, description=description)
     db.add(policy)
-    await db.flush()
+    try:
+        await db.flush()
+    except IntegrityError as exc:
+        # Map ONLY a genuine (name, version) collision to ConflictError by
+        # re-querying; an unrelated integrity error is re-raised so it surfaces
+        # accurately rather than being misreported as a version conflict.
+        await db.rollback()
+        clash = await db.execute(
+            select(GradingPolicy).where(
+                GradingPolicy.name == name, GradingPolicy.version == version
+            )
+        )
+        if clash.scalar_one_or_none() is not None:
+            raise ConflictError(
+                "A grading policy with this name and version already exists.") from exc
+        raise
     for b in boundaries:
         db.add(GradingBoundary(
             policy_id=policy.id, grade_name=b.grade_name,

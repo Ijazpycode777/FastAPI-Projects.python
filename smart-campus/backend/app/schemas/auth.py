@@ -27,6 +27,16 @@ class PasswordChangeIn(BaseModel):
     new_password: str = Field(min_length=10, max_length=128)
 
 
+class AdminCreateIn(BaseModel):
+    """An admin creates another admin account. The new admin is active and can
+    log in immediately with the chosen password (no forced reset — the creating
+    admin handed over the credential deliberately)."""
+    email: EmailStr
+    full_name: str = Field(min_length=1, max_length=160)
+    phone: str | None = None
+    password: str = Field(min_length=10, max_length=128)
+
+
 class CsrfOut(BaseModel):
     csrf_token: str
 
@@ -39,7 +49,7 @@ class UserOut(ORMBase):
     phone: str | None = None
     is_active: bool
     must_reset_password: bool
-    last_login_at: str | None = None
+    last_login_at: datetime | None = None
 
 
 class ProfileOut(BaseModel):

@@ -70,7 +70,7 @@ class TimetableEntry(UUIDPK, TimestampMixin, Base):
         String(36), ForeignKey("sections.id", ondelete="SET NULL"), nullable=True
     )
     period_name: Mapped[str | None] = mapped_column(String(40), nullable=True)
-    is_cancelled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_cancelled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", nullable=False)
 
     teacher = relationship("Teacher", back_populates="timetable_entries")
     subject = relationship("Subject")

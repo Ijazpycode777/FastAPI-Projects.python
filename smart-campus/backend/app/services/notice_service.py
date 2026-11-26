@@ -39,10 +39,23 @@ async def _teacher_owns_target(db: AsyncSession, actor, target: dict) -> bool:
 async def publish(db: AsyncSession, actor, data: dict[str, Any]) -> Notice:
     if actor.role == "teacher" and not await _teacher_owns_target(db, actor, data):
         raise ForbiddenError("Teachers may only publish notices for their own classes/sections.")
-    if data["target_audience"] in ("program", "class", "section") and not data.get("class_id") and data["target_audience"] == "class":
-        raise ValidationError("Class-targeted notice requires class_id.")
-    if data["target_audience"] == "section" and not (data.get("class_id") and data.get("section_id")):
+    # D14: audience-target consistency. The same rules are enforced by a DB
+    # CHECK constraint (notice_audience_target_consistency_check) so direct SQL
+    # inserts cannot bypass them; this service check returns a clean 4xx.
+    aud = data["target_audience"]
+    if aud == "program" and not data.get("program_id"):
+        raise ValidationError("Program-targeted notice requires program_id.")
+    if aud == "class":
+        if not data.get("class_id"):
+            raise ValidationError("Class-targeted notice requires class_id.")
+        if data.get("section_id"):
+            raise ValidationError("Class-targeted notice must not specify a section.")
+    if aud == "section" and not (data.get("class_id") and data.get("section_id")):
         raise ValidationError("Section-targeted notice requires class_id and section_id.")
+    if aud in ("all", "admins", "teachers", "students") and (
+        data.get("program_id") or data.get("class_id") or data.get("section_id")
+    ):
+        raise ValidationError("General-audience notices must not set program/class/section targets.")
 
     notice = Notice(
         title=data["title"], content=data["content"],

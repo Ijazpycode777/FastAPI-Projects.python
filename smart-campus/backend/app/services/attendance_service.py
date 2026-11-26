@@ -68,6 +68,14 @@ async def mark_bulk(
         enrol = await _resolve_enrolment(db, m["student_id"], str(entry.academic_session_id))
         if str(enrol.class_id) != str(entry.class_id):
             raise ForbiddenError("Student does not belong to this class.")
+        # D4: when the scheduled lecture is section-specific, the student must
+        # belong to that section — otherwise a student in section A could be
+        # marked present for a section-B lecture. (The attendance record's
+        # subject/teacher/class/section/session are copied from the entry, so
+        # they are consistent with it by construction; this guards the one
+        # cross-table relationship that was not validated.)
+        if entry.section_id is not None and str(enrol.section_id) != str(entry.section_id):
+            raise ForbiddenError("Student does not belong to this section.")
         existing = await db.execute(select(AttendanceRecord).where(
             AttendanceRecord.student_id == m["student_id"],
             AttendanceRecord.timetable_entry_id == entry.id,

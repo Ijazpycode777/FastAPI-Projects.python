@@ -7,12 +7,14 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     Date,
+    DateTime,
     ForeignKey,
     Index,
     Integer,
     Numeric,
     String,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -34,11 +36,18 @@ class GradingPolicy(UUIDPK, TimestampMixin, Base):
     __table_args__ = (
         UniqueConstraint("name", "version", name="uq_grading_policy_name_version"),
         Index("ix_grading_policy_active", "is_active"),
+        # D10: at most ONE active grading policy globally. The service
+        # ``activate`` deactivates every other policy before activating the
+        # target inside one transaction, so this partial unique index is safe.
+        Index(
+            "uq_grading_one_active", "is_active", unique=True,
+            postgresql_where=text("is_active"), sqlite_where=text("is_active"),
+        ),
     )
 
     name: Mapped[str] = mapped_column(String(80), nullable=False)
-    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    is_active: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", nullable=False)
     description: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     boundaries = relationship(
@@ -63,7 +72,7 @@ class GradingBoundary(UUIDPK, TimestampMixin, Base):
     grade_name: Mapped[str] = mapped_column(String(8), nullable=False)
     min_percentage: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False)
     max_percentage: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False)
-    is_pass: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    is_pass: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="1")
     description: Mapped[str | None] = mapped_column(String(120), nullable=True)
 
     policy = relationship("GradingPolicy", back_populates="boundaries")
@@ -101,14 +110,15 @@ class Examination(UUIDPK, TimestampMixin, Base):
     max_marks: Mapped[int] = mapped_column(Integer, nullable=False)
     passing_marks: Mapped[int] = mapped_column(Integer, nullable=False)
     exam_date: Mapped[date] = mapped_column(Date, nullable=False)
-    status: Mapped[str] = mapped_column(String(12), nullable=False, default="draft")
+    status: Mapped[str] = mapped_column(String(12), nullable=False, default="draft", server_default="draft")
     created_by: Mapped[str] = mapped_column(
         String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     finalized_by: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
-    finalized_at: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    # D7: timezone-aware timestamp (was String(40)).
+    finalized_at: Mapped[str | None] = mapped_column(DateTime(timezone=True), nullable=True)
     grading_policy_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("grading_policies.id", ondelete="SET NULL"), nullable=True
     )
@@ -139,17 +149,18 @@ class StudentMark(UUIDPK, TimestampMixin, Base):
     subject_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("subjects.id", ondelete="RESTRICT"), nullable=False
     )
-    marks_obtained: Mapped[float] = mapped_column(Numeric(6, 2), nullable=False, default=0)
-    is_absent: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    marks_obtained: Mapped[float] = mapped_column(Numeric(6, 2), nullable=False, default=0, server_default="0")
+    is_absent: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", nullable=False)
     grade: Mapped[str | None] = mapped_column(String(8), nullable=True)
     percentage: Mapped[float | None] = mapped_column(Numeric(6, 2), nullable=True)
     is_pass: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
-    status: Mapped[str] = mapped_column(String(12), nullable=False, default="entered")  # entered | finalized
+    status: Mapped[str] = mapped_column(String(12), nullable=False, default="entered", server_default="entered")  # entered | finalized
     recorded_by: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
-    recorded_at: Mapped[str | None] = mapped_column(String(40), nullable=True)
-    finalized_at: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    # D7: timezone-aware timestamps (were String(40)).
+    recorded_at: Mapped[str | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finalized_at: Mapped[str | None] = mapped_column(DateTime(timezone=True), nullable=True)
     note: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     examination = relationship("Examination", back_populates="marks")

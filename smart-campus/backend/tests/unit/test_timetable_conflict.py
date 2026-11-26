@@ -33,17 +33,30 @@ def test_teacher_conflict_detected():
     assert "Teacher" in conflict_reason(e1, new)
 
 
-def test_class_conflict_detected():
-    e1 = _e("1", (8, 30), (9, 30), teacher="tA", cls="c1", section="sA")
+def test_classwide_conflict_detected():
+    """A class-wide entry (section NULL) conflicts with any other entry of the
+    same class at an overlapping time — it occupies every section (D5)."""
+    e1 = EntryRef("1", "monday", time(8, 30), time(9, 30), "tA", "c1", None)
     new = _e("2", (9, 0), (10, 0), teacher="tB", cls="c1", section="sB")
     assert find_conflict(new, [e1]) is e1
     assert "Class" in conflict_reason(e1, new)
 
 
+def test_different_sections_same_class_no_conflict():
+    """Two section-specific entries for DIFFERENT sections of the same class at
+    overlapping times do NOT conflict — sections are independent and may run
+    simultaneous lessons (D5). This was incorrectly rejected by the old logic."""
+    e1 = _e("1", (8, 30), (9, 30), teacher="tA", cls="c1", section="sA")
+    new = _e("2", (9, 0), (10, 0), teacher="tB", cls="c1", section="sB")
+    assert find_conflict(new, [e1]) is None
+
+
 def test_section_conflict_detected():
+    """Same class + same section (both non-NULL) overlapping -> conflict."""
     e1 = _e("1", (8, 30), (9, 30), teacher="tA", cls="c1", section="s1")
-    new = _e("2", (9, 0), (10, 0), teacher="tB", cls="c9", section="s1")
+    new = _e("2", (9, 0), (10, 0), teacher="tB", cls="c1", section="s1")
     assert find_conflict(new, [e1]) is e1
+    assert "section" in conflict_reason(e1, new).lower()
 
 
 def test_no_conflict_when_different_day():

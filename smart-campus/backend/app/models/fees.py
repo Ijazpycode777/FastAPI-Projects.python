@@ -36,9 +36,9 @@ class FeeStructure(UUIDPK, TimestampMixin, Base):
         String(36), ForeignKey("academic_sessions.id", ondelete="RESTRICT"), nullable=False
     )
     amount: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
-    frequency: Mapped[str] = mapped_column(String(12), nullable=False, default="one_time")
-    due_after_days: Mapped[int] = mapped_column(nullable=False, default=30)
-    is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
+    frequency: Mapped[str] = mapped_column(String(12), nullable=False, default="one_time", server_default="one_time")
+    due_after_days: Mapped[int] = mapped_column(nullable=False, default=30, server_default="30")
+    is_active: Mapped[bool] = mapped_column(default=True, server_default="1", nullable=False)
 
 
 class FeeInvoice(UUIDPK, TimestampMixin, Base):
@@ -66,7 +66,7 @@ class FeeInvoice(UUIDPK, TimestampMixin, Base):
     amount: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
     issued_date: Mapped[date] = mapped_column(Date, nullable=False)
     due_date: Mapped[date] = mapped_column(Date, nullable=False)
-    status: Mapped[str] = mapped_column(String(12), nullable=False, default="unpaid")
+    status: Mapped[str] = mapped_column(String(12), nullable=False, default="unpaid", server_default="unpaid")
     issued_by: Mapped[str] = mapped_column(
         String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )

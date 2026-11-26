@@ -32,15 +32,14 @@ def _client_meta(request: Request) -> tuple[str, str]:
 
 
 async def _account_locked(user: User) -> bool:
-    if user.locked_until:
-        try:
-            locked = datetime.fromisoformat(user.locked_until)
-        except ValueError:
-            return False
-        if locked.tzinfo is None:
-            locked = locked.replace(tzinfo=timezone.utc)
-        return locked > datetime.now(timezone.utc)
-    return False
+    # D7: locked_until is now a timezone-aware DateTime column, so the value is
+    # already a datetime object (or None) — no fromisoformat parsing needed.
+    locked = user.locked_until
+    if locked is None:
+        return False
+    if locked.tzinfo is None:
+        locked = locked.replace(tzinfo=timezone.utc)
+    return locked > datetime.now(timezone.utc)
 
 
 # Real Argon2id hash of a fixed throwaway value, computed once and reused. When
@@ -94,10 +93,11 @@ async def login(
         if user.failed_login_attempts >= settings.account_lockout_threshold:
             # Real FUTURE lockout: now + configured minutes, timezone-aware, so
             # _account_locked() (which compares against datetime.now(utc)) actually
-            # holds the account until the lockout elapses.
+            # holds the account until the lockout elapses. D7: stored as a native
+            # DateTime (timezone-aware), not an ISO string.
             user.locked_until = (
                 datetime.now(timezone.utc) + timedelta(minutes=settings.account_lockout_minutes)
-            ).isoformat()
+            )
             user.failed_login_attempts = 0
         # COMMIT before raising so the counter/lockout survives the auth error.
         # The error propagates to the exception handler and the get_db dependency
@@ -109,7 +109,7 @@ async def login(
     # Success — reset counters, rotate token (session fixation protection).
     user.failed_login_attempts = 0
     user.locked_until = None
-    user.last_login_at = datetime.now(timezone.utc).isoformat()
+    user.last_login_at = datetime.now(timezone.utc)
 
     token = generate_session_token()
     expires = session_expires_at()
@@ -235,3 +235,48 @@ async def admin_reset_password(db: AsyncSession, target: User, request: Request)
     )
     await db.commit()
     return temp
+
+
+async def create_admin(db: AsyncSession, actor: User, request: Request, data: dict) -> User:
+    """An admin creates another admin account.
+
+    The new admin is active immediately and can log in with the chosen password
+    (no forced reset — the creating admin handed over the credential on purpose).
+    A weak password or a duplicate email is rejected with a clean 4xx before any
+    row is inserted.
+    """
+    ok, reason = is_strong_password(data["password"])
+    if not ok:
+        raise AppException(reason or "Weak password.", status_code=422, code="VALIDATION_ERROR")
+    email = data["email"].lower().strip()
+    if (await db.execute(select(User).where(User.email == email))).scalar_one_or_none():
+        raise ConflictError("A user with that email already exists.")
+    user = User(
+        email=email,
+        role="admin",
+        password_hash=hash_password(data["password"]),
+        full_name=data["full_name"],
+        phone=data.get("phone"),
+        is_active=True,
+        must_reset_password=False,
+    )
+    db.add(user)
+    await db.flush()
+    ip, ua = _client_meta(request)
+    await record_audit(
+        db, actor_id=actor.id, actor_role=actor.role,
+        action="admin.create", resource_type="user", resource_id=user.id,
+        ip_address=ip, user_agent=ua,
+        after={"email": email, "full_name": data["full_name"]},
+    )
+    await db.commit()
+    await db.refresh(user)
+    return user
+
+
+async def list_admins(db: AsyncSession) -> list[User]:
+    """All admin accounts, oldest first (for the Administrators management page)."""
+    res = await db.execute(
+        select(User).where(User.role == "admin").order_by(User.created_at)
+    )
+    return list(res.scalars().all())

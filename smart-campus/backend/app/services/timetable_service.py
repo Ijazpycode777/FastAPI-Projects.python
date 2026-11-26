@@ -47,13 +47,25 @@ async def create_entry(db: AsyncSession, actor, data: dict[str, Any]) -> Timetab
     if (await db.execute(stmt)).scalar_one_or_none() is None:
         raise ForbiddenError("Teacher is not assigned to this subject/class/section.")
 
-    # Serialize conflict detection for this (teacher, day) so two concurrent
-    # create_entry calls cannot both read an empty conflict set and insert
-    # overlapping entries (double-booking a teacher or class). The advisory
-    # lock is held until commit; the candidate rows are also locked (FOR UPDATE)
-    # on Postgres as a second line of defense.
+    # D5: validate time order in the service so a bad request returns a clean
+    # 4xx instead of surfacing as a 500 from the DB CHECK constraint.
+    if data["end_time"] <= data["start_time"]:
+        raise ValidationError("end_time must be after start_time")
+
+    # Serialize conflict detection so two concurrent create_entry calls cannot
+    # both read an empty conflict set and insert overlapping entries. Two
+    # advisory locks are held until commit: one keyed on (teacher, day) to
+    # prevent a teacher being double-booked, and one on (class, day) to prevent
+    # the same class/section scope being double-booked by DIFFERENT teachers
+    # (the teacher lock alone would not serialize two different teachers booking
+    # the same class). On SQLite these are no-ops (single-writer serialization).
+    # The candidate rows are also locked (FOR UPDATE) on Postgres as a second
+    # line of defense.
     await pg_advisory_xact_lock(
-        db, stable_lock_key("tt_conflict", str(data["teacher_id"]), data["day_of_week"])
+        db, stable_lock_key("tt_conflict", "t", str(data["teacher_id"]), data["day_of_week"])
+    )
+    await pg_advisory_xact_lock(
+        db, stable_lock_key("tt_conflict", "c", str(data["class_id"]), data["day_of_week"])
     )
     candidates = await db.execute(
         select(TimetableEntry).where(
@@ -109,13 +121,22 @@ async def update_entry(db: AsyncSession, actor, entry: TimetableEntry, data: dic
             setattr(entry, k, data[k])
     if entry.end_time <= entry.start_time:
         raise ValidationError("end_time must be after start_time")
+    # D5: same dual advisory lock as create_entry (teacher + class scope) so a
+    # concurrent create/update cannot race past the conflict check, plus FOR
+    # UPDATE on the candidate rows.
+    await pg_advisory_xact_lock(
+        db, stable_lock_key("tt_conflict", "t", str(entry.teacher_id), entry.day_of_week)
+    )
+    await pg_advisory_xact_lock(
+        db, stable_lock_key("tt_conflict", "c", str(entry.class_id), entry.day_of_week)
+    )
     candidates = await db.execute(
         select(TimetableEntry).where(
             TimetableEntry.academic_session_id == entry.academic_session_id,
             TimetableEntry.day_of_week == entry.day_of_week,
             TimetableEntry.is_cancelled.is_(False),
             TimetableEntry.id != entry.id,
-        )
+        ).with_for_update()
     )
     existing = [
         EntryRef(

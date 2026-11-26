@@ -1,19 +1,20 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, Link } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useQueryClient } from "@tanstack/react-query";
-import { PageHeader, Card, CardHeader, Skeleton } from "@/components/common";
+import { PageHeader, Card, CardHeader, Skeleton, EmptyState } from "@/components/common";
 import { Field, TextInput, Select } from "@/components/forms";
+import { Layers } from "lucide-react";
 import { http, ApiError } from "@/lib/api";
 import { useToast } from "@/hooks/useToast";
 import { useStudent } from "./queries";
+import { useSessions, usePrograms, useClasses, useSections } from "@/features/academicQueries";
 
-// Placement is free text (like a username): the admin types the program,
-// class/part, section and academic session names. The backend find-or-creates
-// the underlying rows, so there are no fixed dropdown values to pre-populate.
-// Roll numbers are auto-assigned by the backend; the admin does not enter them.
+// Placement is ID-based: the admin selects canonical academic rows (managed on
+// the Classes Distribution page) from dropdowns. No free text — so two students
+// in "PB 21" always share the same class row. Roll numbers are auto-assigned.
 const schema = z.object({
   full_name: z.string().min(1, "Required"),
   email: z.string().email("Valid email required"),
@@ -21,12 +22,14 @@ const schema = z.object({
   date_of_birth: z.string().optional(),
   gender: z.enum(["male", "female", "other"]).or(z.literal("")),
   admission_date: z.string().min(1, "Required"),
-  program: z.string().min(1, "Required"),
-  class_name: z.string().min(1, "Required"),
-  section: z.string().min(1, "Required"),
-  academic_session: z.string().min(1, "Required"),
-  // Only required when creating (edit mode does not render this field).
-  password: z.string().min(10, "At least 10 characters").optional(),
+  academic_session_id: z.string().min(1, "Required"),
+  program_id: z.string().min(1, "Required"),
+  class_id: z.string().min(1, "Required"),
+  section_id: z.string().min(1, "Required"),
+  // Required when creating; optional when editing (leave blank to keep the
+  // current password). An admin can set a new password directly from the edit
+  // form — it is hashed and applied on the backend (no temporary/reset flow).
+  password: z.union([z.string().min(10, "At least 10 characters"), z.literal("")]).optional(),
   guardian_name: z.string().optional(),
   guardian_phone: z.string().optional(),
 });
@@ -41,13 +44,23 @@ export function StudentFormPage() {
   const [submitting, setSubmitting] = useState(false);
 
   const { data: existing, isLoading } = useStudent(id);
+  const { data: sessions } = useSessions();
+  const { data: programs } = usePrograms();
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<FormValues>({
+  const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: { gender: "", admission_date: new Date().toISOString().slice(0, 10) },
   });
 
-  // Prefill from the existing student's resolved placement names when editing.
+  const programId = watch("program_id");
+  const classId = watch("class_id");
+  const sectionId = watch("section_id");
+  // Cascading dropdowns: classes filtered by the selected program, sections by
+  // the selected class. Both are disabled (skip the fetch) until the parent is set.
+  const { data: classes } = useClasses(programId);
+  const { data: sections } = useSections(classId);
+
+  // Prefill from the existing student's placement IDs when editing.
   useEffect(() => {
     if (isEdit && existing) {
       reset({
@@ -57,15 +70,30 @@ export function StudentFormPage() {
         date_of_birth: existing.date_of_birth ?? "",
         gender: (existing.gender ?? "") as FormValues["gender"],
         admission_date: existing.admission_date,
-        program: existing.program_name ?? "",
-        class_name: existing.class_name ?? "",
-        section: existing.section_name ?? "",
-        academic_session: existing.session_name ?? "",
+        academic_session_id: existing.current_session_id ?? "",
+        program_id: existing.current_program_id ?? "",
+        class_id: existing.current_class_id ?? "",
+        section_id: existing.current_section_id ?? "",
         guardian_name: "",
         guardian_phone: "",
       });
     }
   }, [existing, isEdit, reset]);
+
+  // When the program changes, drop the class/section if they no longer belong to it.
+  useEffect(() => {
+    if (programId && classes && classId && !classes.some((c) => c.id === classId)) {
+      setValue("class_id", "");
+      setValue("section_id", "");
+    }
+  }, [programId, classes, classId, setValue]);
+
+  // When the class changes, drop the section if it no longer belongs to it.
+  useEffect(() => {
+    if (classId && sections && sectionId && !sections.some((s) => s.id === sectionId)) {
+      setValue("section_id", "");
+    }
+  }, [classId, sections, sectionId, setValue]);
 
   const onSubmit = async (v: FormValues) => {
     setSubmitting(true);
@@ -74,10 +102,20 @@ export function StudentFormPage() {
         full_name: v.full_name, email: v.email, phone: v.phone || null,
         date_of_birth: v.date_of_birth || null, gender: v.gender || null,
         admission_date: v.admission_date,
-        program: v.program, class_name: v.class_name,
-        section: v.section, academic_session: v.academic_session,
+        program_id: v.program_id, class_id: v.class_id,
+        section_id: v.section_id, academic_session_id: v.academic_session_id,
       };
-      if (!isEdit) payload.password = v.password;
+      if (!isEdit) {
+        if (!v.password) {
+          toast.error("Initial password is required", "Min 10 characters, with upper/lower/digit/symbol.");
+          setSubmitting(false);
+          return;
+        }
+        payload.password = v.password;
+      } else if (v.password) {
+        // Edit: only send a password when the admin typed a new one.
+        payload.password = v.password;
+      }
       if (v.guardian_name && v.guardian_phone) {
         payload.guardian = { name: v.guardian_name, phone: v.guardian_phone };
       }
@@ -98,12 +136,25 @@ export function StudentFormPage() {
     return <div className="space-y-4"><Skeleton className="h-8 w-48" /><Skeleton className="h-96" /></div>;
   }
 
+  // If the academic structure is empty, the admin must build it first — there is
+  // nothing to select from. This is the whole point of the Classes Distribution page.
+  const noStructure = !isEdit && (!programs?.length || !sessions?.length);
+
   return (
     <div className="max-w-3xl">
       <PageHeader
         title={isEdit ? "Edit Student" : "Add Student"}
         description={isEdit ? "Update student details and placement." : "Create a student account and enrol them in a class."}
       />
+
+      {noStructure && (
+        <Card className="mb-4">
+          <EmptyState icon={Layers} title="Set up the academic structure first"
+            description="Before enrolling students, create at least one program, class, section and academic session."
+            action={<Link to="/classes" className="btn-primary"><Layers size={16} /> Open Classes Distribution</Link>} />
+        </Card>
+      )}
+
       <form onSubmit={handleSubmit(onSubmit)}>
         <Card className="mb-4">
           <CardHeader title="Personal information" />
@@ -118,31 +169,46 @@ export function StudentFormPage() {
         </Card>
 
         <Card className="mb-4">
-          <CardHeader title="Placement" subtitle="Type the names — new values are created automatically." />
+          <CardHeader title="Placement" subtitle="Select the academic rows created on the Classes Distribution page." />
           <div className="p-5 grid sm:grid-cols-2 gap-4">
-            <Field label="Academic session" required error={errors.academic_session?.message} hint="e.g. 2025-2026">
-              <TextInput {...register("academic_session")} placeholder="2025-2026" />
+            <Field label="Academic session" required error={errors.academic_session_id?.message}>
+              <Select {...register("academic_session_id")}>
+                <option value="">— select —</option>
+                {sessions?.map((s) => <option key={s.id} value={s.id}>{s.name}{s.is_active ? " (active)" : ""}</option>)}
+              </Select>
             </Field>
-            <Field label="Program" required error={errors.program?.message} hint="e.g. ICS, FSc, BSCS">
-              <TextInput {...register("program")} placeholder="ICS" />
+            <Field label="Program" required error={errors.program_id?.message}>
+              <Select {...register("program_id")}>
+                <option value="">— select —</option>
+                {programs?.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.code})</option>)}
+              </Select>
             </Field>
-            <Field label="Class / Part" required error={errors.class_name?.message} hint="e.g. Part 1, Year 2">
-              <TextInput {...register("class_name")} placeholder="Part 1" />
+            <Field label="Class / Part" required error={errors.class_id?.message} hint={programId && !classes?.length ? "No classes for this program yet" : undefined}>
+              <Select {...register("class_id")} disabled={!programId}>
+                <option value="">— select —</option>
+                {classes?.map((c) => <option key={c.id} value={c.id}>{c.name} (Year {c.year})</option>)}
+              </Select>
             </Field>
-            <Field label="Section" required error={errors.section?.message} hint="e.g. A, B, Morning">
-              <TextInput {...register("section")} placeholder="A" />
+            <Field label="Section" required error={errors.section_id?.message} hint={classId && !sections?.length ? "No sections for this class yet" : undefined}>
+              <Select {...register("section_id")} disabled={!classId}>
+                <option value="">— select —</option>
+                {sections?.map((s) => <option key={s.id} value={s.id}>{s.name} (cap {s.capacity})</option>)}
+              </Select>
             </Field>
           </div>
         </Card>
 
         <Card className="mb-4">
-          <CardHeader title={isEdit ? "Guardian" : "Account & guardian"} />
+          <CardHeader title={isEdit ? "Password & guardian" : "Account & guardian"} />
           <div className="p-5 grid sm:grid-cols-2 gap-4">
-            {!isEdit && (
-              <Field label="Initial password" required error={errors.password?.message} hint="Min 10 chars, with upper/lower/digit/symbol.">
-                <TextInput type="text" {...register("password")} />
-              </Field>
-            )}
+            <Field
+              label={isEdit ? "New password" : "Initial password"}
+              required={!isEdit}
+              error={errors.password?.message}
+              hint={isEdit ? "Leave blank to keep the current password. Min 10 chars, with upper/lower/digit/symbol." : "Min 10 chars, with upper/lower/digit/symbol."}
+            >
+              <TextInput type="text" {...register("password")} />
+            </Field>
             <div className="sm:col-span-2 grid sm:grid-cols-2 gap-4">
               <Field label="Guardian name"><TextInput {...register("guardian_name")} /></Field>
               <Field label="Guardian phone"><TextInput {...register("guardian_phone")} /></Field>

@@ -1,7 +1,7 @@
 """Examination & grading schemas."""
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -84,7 +84,7 @@ class ExaminationOut(ORMBase):
     status: str
     grading_policy_id: str | None = None
     created_by: str | None = None
-    finalized_at: str | None = None
+    finalized_at: datetime | None = None
 
 
 # ---------------- Marks ----------------
@@ -117,7 +117,7 @@ class StudentMarkOut(ORMBase):
     is_pass: bool | None = None
     status: str
     recorded_by: str | None = None
-    recorded_at: str | None = None
+    recorded_at: datetime | None = None
 
 
 class GradeResult(BaseModel):

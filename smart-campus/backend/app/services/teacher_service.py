@@ -80,10 +80,38 @@ async def update_teacher(db: AsyncSession, actor: User, teacher: Teacher, data: 
     # Validate a department change BEFORE mutating (4xx on invalid id).
     if data.get("department_id") is not None:
         await _require_department(db, data["department_id"])
+    # Pop the password before the generic setattr loop below — Teacher has no
+    # password column, so leaving it in data would raise AttributeError. It is
+    # applied to the linked User explicitly (see toggle_active for why the lazy
+    # `teacher.user` relationship must not be navigated under async).
+    new_password = data.pop("password", None)
     before = await snapshot(teacher)
     for k, v in data.items():
         if v is not None:
             setattr(teacher, k, v)
+    if new_password:
+        from app.security.password import is_strong_password
+        from app.models.session import Session as SessionModel
+        ok, reason = is_strong_password(new_password)
+        if not ok:
+            raise ValidationError(reason or "Weak password.")
+        # Admin-set password: apply directly to the linked user. Clear the
+        # must-reset flag and any login lock, and revoke the user's active
+        # sessions so a stale or stolen session cannot survive the change.
+        await db.execute(update(User).where(User.id == teacher.user_id).values(
+            password_hash=hash_password(new_password),
+            must_reset_password=False,
+            failed_login_attempts=0,
+            locked_until=None,
+        ))
+        await db.execute(update(SessionModel).where(
+            SessionModel.user_id == teacher.user_id, SessionModel.revoked.is_(False),
+        ).values(revoked=True))
+        await record_audit(
+            db, actor_id=actor.id, actor_role=actor.role,
+            action="auth.password_change", resource_type="user",
+            resource_id=teacher.user_id, after={"via": "teacher.update"},
+        )
     await record_audit(
         db, actor_id=actor.id, actor_role=actor.role,
         action="teacher.update", resource_type="teacher", resource_id=teacher.id,

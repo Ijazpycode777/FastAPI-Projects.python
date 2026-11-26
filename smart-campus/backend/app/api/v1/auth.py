@@ -11,6 +11,7 @@ from app.core.limiter import rate_limit
 from app.database.session import get_db
 from app.models.user import User
 from app.schemas.auth import (
+    AdminCreateIn,
     CsrfOut,
     LoginIn,
     PasswordChangeIn,
@@ -72,6 +73,24 @@ async def admin_reset(
         raise NotFoundError("User not found.")
     temp = await auth_service.admin_reset_password(db, target, request)
     return ResetPasswordOut(temporary_password=temp, message="Temporary password issued. User must reset on next login.")
+
+
+@router.get("/admins", response_model=list[UserOut], dependencies=[Depends(require_admin())])
+async def list_admins(admin: User = Depends(require_admin()), db: AsyncSession = Depends(get_db)):
+    """List all administrator accounts (for the Administrators management page)."""
+    return await auth_service.list_admins(db)
+
+
+@router.post("/admins", response_model=UserOut, status_code=201, dependencies=[Depends(require_admin())])
+async def create_admin(
+    payload: AdminCreateIn,
+    request: Request,
+    admin: User = Depends(require_admin()),
+    db: AsyncSession = Depends(get_db),
+):
+    """An admin creates another admin account. The new admin is active immediately."""
+    user = await auth_service.create_admin(db, admin, request, payload.model_dump())
+    return UserOut.model_validate(user)
 
 
 def _profile(user: User) -> ProfileOut:

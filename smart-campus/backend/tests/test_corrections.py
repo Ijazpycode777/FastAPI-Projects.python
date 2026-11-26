@@ -131,8 +131,12 @@ async def test_account_locks_after_threshold(client, db, monkeypatch):
         assert resp.status_code == 401
     await db.refresh(u)
     assert u.locked_until is not None
-    locked = datetime.fromisoformat(u.locked_until)
-    assert locked.tzinfo is not None, "lockout timestamp must be timezone-aware"
+    # D7: locked_until is now a native DateTime column. SQLite returns naive
+    # datetimes for DateTime(timezone=True) (tzinfo is preserved on PostgreSQL
+    # TIMESTAMPTZ); normalize for comparison, as _account_locked() does.
+    locked = u.locked_until
+    if locked.tzinfo is None:
+        locked = locked.replace(tzinfo=timezone.utc)
     assert locked > datetime.now(timezone.utc), "lockout must be a real FUTURE time"
     # A valid password is still rejected while locked.
     resp = await client.post("/api/v1/auth/login", json={
@@ -152,7 +156,8 @@ async def test_login_available_again_after_lock_expires(client, db, monkeypatch)
     await db.refresh(u)
     assert u.locked_until is not None
     # Simulate the lockout elapsing: push locked_until into the past.
-    u.locked_until = (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat()
+    # D7: native DateTime — assign a datetime, not an ISO string.
+    u.locked_until = datetime.now(timezone.utc) - timedelta(minutes=1)
     await db.commit()
     resp = await client.post("/api/v1/auth/login", json={
         "email": "lock@test.edu", "password": "GoodPass!2025",

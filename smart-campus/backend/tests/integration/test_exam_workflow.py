@@ -24,8 +24,8 @@ async def _student(admin_client, setup, email):
     _ROLL[0] += 1
     resp = await admin_client.post("/api/v1/students", json={
         "full_name": "Stu Exam", "email": email, "admission_date": "2025-08-01",
-        "program": setup["program_name"], "class_name": setup["class_name"],
-        "section": setup["section_name"], "academic_session": setup["session_name"],
+        "program_id": setup["program_id"], "class_id": setup["class_id"],
+        "section_id": setup["section_id"], "academic_session_id": setup["session_id"],
         "password": "Student!2025",
     })
     assert resp.status_code == 200, resp.text

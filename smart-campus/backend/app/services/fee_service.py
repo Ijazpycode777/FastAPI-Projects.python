@@ -97,8 +97,14 @@ async def record_payment(db: AsyncSession, actor, data: dict[str, Any]) -> Payme
     await pg_advisory_xact_lock(db, stable_lock_key("receipt_seq"))
 
     payments = await db.execute(select(Payment).where(Payment.invoice_id == invoice.id))
-    paid = sum(float(p.amount) for p in payments.scalars().all())
-    if paid + data["amount"] > float(invoice.amount) + 0.01:
+    paid_rows = payments.scalars().all()
+    # D16: exact Decimal arithmetic (Numeric(12,2)) — no float tolerance. The
+    # invoice row is already FOR UPDATE locked, so this read + the subsequent
+    # insert are atomic w.r.t. concurrent payments on the same invoice.
+    from decimal import Decimal
+    paid = sum((p.amount for p in paid_rows), Decimal("0"))
+    new_total = paid + Decimal(str(data["amount"]))
+    if new_total > invoice.amount:
         raise ValidationError("Payment exceeds outstanding balance.")
 
     receipt = await _next_receipt_number(db)
@@ -111,9 +117,9 @@ async def record_payment(db: AsyncSession, actor, data: dict[str, Any]) -> Payme
     db.add(payment)
     await db.flush()
 
-    new_paid = paid + float(data["amount"])
+    new_paid = new_total  # paid + this payment (Decimal; reused for the status calc)
     due_passed = invoice.due_date < data["paid_at"]
-    invoice.status = invoice_status(float(invoice.amount), new_paid, due_passed)
+    invoice.status = invoice_status(float(invoice.amount), float(new_paid), due_passed)
 
     await record_audit(db, actor_id=actor.id, actor_role=actor.role,
                        action="payment.record", resource_type="payment", resource_id=payment.id,

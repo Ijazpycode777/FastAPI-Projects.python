@@ -21,15 +21,20 @@ from app.schemas.academic import (
     AcademicSessionIn,
     AcademicSessionOut,
     AssignmentIn,
-    DepartmentOut,
+    ClassDistributionOut,
     ClassLevelIn,
     ClassLevelOut,
+    ClassLevelUpdateIn,
+    DepartmentOut,
     ProgramIn,
     ProgramOut,
+    ProgramUpdateIn,
     SectionIn,
     SectionOut,
+    SectionUpdateIn,
     SubjectIn,
     SubjectOut,
+    SubjectUpdateIn,
 )
 from app.security.dependencies import get_current_user, require_admin
 from app.services import academic_service
@@ -62,6 +67,17 @@ async def create_program(payload: ProgramIn, admin: User = Depends(require_admin
     return await academic_service.create_program(db, admin, code=payload.code, name=payload.name, description=payload.description)
 
 
+@router.patch("/programs/{program_id}", response_model=ProgramOut, dependencies=[Depends(require_admin())])
+async def update_program(program_id: str, payload: ProgramUpdateIn, admin: User = Depends(require_admin()), db: AsyncSession = Depends(get_db)):
+    return await academic_service.update_program(db, admin, program_id, **payload.model_dump(exclude_unset=True))
+
+
+@router.delete("/programs/{program_id}", dependencies=[Depends(require_admin())])
+async def delete_program(program_id: str, admin: User = Depends(require_admin()), db: AsyncSession = Depends(get_db)):
+    await academic_service.delete_program(db, admin, program_id)
+    return {"message": "Program deleted."}
+
+
 # ---------------- Classes ----------------
 @router.get("/classes", response_model=list[ClassLevelOut], dependencies=[Depends(get_current_user)])
 async def list_classes(program_id: str | None = Query(None), db: AsyncSession = Depends(get_db)):
@@ -74,6 +90,24 @@ async def list_classes(program_id: str | None = Query(None), db: AsyncSession = 
 @router.post("/classes", response_model=ClassLevelOut, dependencies=[Depends(require_admin())])
 async def create_class(payload: ClassLevelIn, admin: User = Depends(require_admin()), db: AsyncSession = Depends(get_db)):
     return await academic_service.create_class(db, admin, program_id=payload.program_id, name=payload.name, year=payload.year)
+
+
+@router.get("/classes/distribution", response_model=list[ClassDistributionOut], dependencies=[Depends(require_admin())])
+async def class_distribution(admin: User = Depends(require_admin()), db: AsyncSession = Depends(get_db)):
+    """Aggregated classes view for the Classes Distribution admin page: each
+    class with its program, sections, designated subjects and enrolment counts."""
+    return await academic_service.list_class_distribution(db)
+
+
+@router.patch("/classes/{class_id}", response_model=ClassLevelOut, dependencies=[Depends(require_admin())])
+async def update_class(class_id: str, payload: ClassLevelUpdateIn, admin: User = Depends(require_admin()), db: AsyncSession = Depends(get_db)):
+    return await academic_service.update_class(db, admin, class_id, **payload.model_dump(exclude_unset=True))
+
+
+@router.delete("/classes/{class_id}", dependencies=[Depends(require_admin())])
+async def delete_class(class_id: str, admin: User = Depends(require_admin()), db: AsyncSession = Depends(get_db)):
+    await academic_service.delete_class(db, admin, class_id)
+    return {"message": "Class deleted."}
 
 
 # ---------------- Sections ----------------
@@ -91,6 +125,17 @@ async def create_section(payload: SectionIn, admin: User = Depends(require_admin
                                                  name=payload.name, capacity=payload.capacity)
 
 
+@router.patch("/sections/{section_id}", response_model=SectionOut, dependencies=[Depends(require_admin())])
+async def update_section(section_id: str, payload: SectionUpdateIn, admin: User = Depends(require_admin()), db: AsyncSession = Depends(get_db)):
+    return await academic_service.update_section(db, admin, section_id, **payload.model_dump(exclude_unset=True))
+
+
+@router.delete("/sections/{section_id}", dependencies=[Depends(require_admin())])
+async def delete_section(section_id: str, admin: User = Depends(require_admin()), db: AsyncSession = Depends(get_db)):
+    await academic_service.delete_section(db, admin, section_id)
+    return {"message": "Section deleted."}
+
+
 # ---------------- Subjects ----------------
 @router.get("/subjects", response_model=list[SubjectOut], dependencies=[Depends(get_current_user)])
 async def list_subjects(program_id: str | None = Query(None), db: AsyncSession = Depends(get_db)):
@@ -105,6 +150,17 @@ async def create_subject(payload: SubjectIn, admin: User = Depends(require_admin
     return await academic_service.create_subject(db, admin, program_id=payload.program_id, code=payload.code,
                                                  name=payload.name, theory_marks=payload.theory_marks,
                                                  practical_marks=payload.practical_marks)
+
+
+@router.patch("/subjects/{subject_id}", response_model=SubjectOut, dependencies=[Depends(require_admin())])
+async def update_subject(subject_id: str, payload: SubjectUpdateIn, admin: User = Depends(require_admin()), db: AsyncSession = Depends(get_db)):
+    return await academic_service.update_subject(db, admin, subject_id, **payload.model_dump(exclude_unset=True))
+
+
+@router.delete("/subjects/{subject_id}", dependencies=[Depends(require_admin())])
+async def delete_subject(subject_id: str, admin: User = Depends(require_admin()), db: AsyncSession = Depends(get_db)):
+    await academic_service.delete_subject(db, admin, subject_id)
+    return {"message": "Subject deleted."}
 
 
 # ---------------- Departments ----------------
