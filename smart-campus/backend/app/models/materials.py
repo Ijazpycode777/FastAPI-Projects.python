@@ -9,7 +9,7 @@ program (used to filter the class list), class and the file.
 """
 from __future__ import annotations
 
-from sqlalchemy import Boolean, ForeignKey, Index, Integer, String
+from sqlalchemy import Boolean, ForeignKey, Index, Integer, String, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import Base, TimestampMixin, UUIDPK
@@ -34,6 +34,6 @@ class StudyMaterial(UUIDPK, TimestampMixin, Base):
     file_name: Mapped[str] = mapped_column(String(255), nullable=False)
     file_size: Mapped[int] = mapped_column(Integer, nullable=False)
     content_type: Mapped[str] = mapped_column(String(120), nullable=False)
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1", nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"), nullable=False)
 
     class_level = relationship("ClassLevel")

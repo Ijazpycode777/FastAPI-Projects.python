@@ -47,7 +47,7 @@ class GradingPolicy(UUIDPK, TimestampMixin, Base):
 
     name: Mapped[str] = mapped_column(String(80), nullable=False)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
-    is_active: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"), nullable=False)
     description: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     boundaries = relationship(
@@ -72,7 +72,7 @@ class GradingBoundary(UUIDPK, TimestampMixin, Base):
     grade_name: Mapped[str] = mapped_column(String(8), nullable=False)
     min_percentage: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False)
     max_percentage: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False)
-    is_pass: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="1")
+    is_pass: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=text("true"))
     description: Mapped[str | None] = mapped_column(String(120), nullable=True)
 
     policy = relationship("GradingPolicy", back_populates="boundaries")
@@ -150,7 +150,7 @@ class StudentMark(UUIDPK, TimestampMixin, Base):
         String(36), ForeignKey("subjects.id", ondelete="RESTRICT"), nullable=False
     )
     marks_obtained: Mapped[float] = mapped_column(Numeric(6, 2), nullable=False, default=0, server_default="0")
-    is_absent: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", nullable=False)
+    is_absent: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"), nullable=False)
     grade: Mapped[str | None] = mapped_column(String(8), nullable=True)
     percentage: Mapped[float | None] = mapped_column(Numeric(6, 2), nullable=True)
     is_pass: Mapped[bool | None] = mapped_column(Boolean, nullable=True)

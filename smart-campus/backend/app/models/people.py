@@ -173,7 +173,7 @@ class StudentEnrolment(UUIDPK, TimestampMixin, Base):
         String(36), ForeignKey("sections.id", ondelete="RESTRICT"), nullable=False
     )
     roll_number: Mapped[int] = mapped_column(nullable=False)
-    is_active: Mapped[bool] = mapped_column(default=True, server_default=text("1"), nullable=False)
+    is_active: Mapped[bool] = mapped_column(default=True, server_default=text("true"), nullable=False)
 
     student = relationship("Student", back_populates="enrolments")
     academic_history = relationship("StudentAcademicHistory", back_populates="enrolment", uselist=False)

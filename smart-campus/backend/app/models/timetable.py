@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import time
 
-from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Index, String, Time, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Index, String, Time, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import Base, TimestampMixin, UUIDPK
@@ -70,7 +70,7 @@ class TimetableEntry(UUIDPK, TimestampMixin, Base):
         String(36), ForeignKey("sections.id", ondelete="SET NULL"), nullable=True
     )
     period_name: Mapped[str | None] = mapped_column(String(40), nullable=True)
-    is_cancelled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", nullable=False)
+    is_cancelled: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"), nullable=False)
 
     teacher = relationship("Teacher", back_populates="timetable_entries")
     subject = relationship("Subject")

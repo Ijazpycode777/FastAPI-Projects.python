@@ -59,7 +59,7 @@ class TeacherAssignment(UUIDPK, TimestampMixin, Base):
     academic_session_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("academic_sessions.id", ondelete="RESTRICT"), nullable=False
     )
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("1"), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"), nullable=False)
 
     teacher = relationship("Teacher", back_populates="assignments")
     subject = relationship("Subject")

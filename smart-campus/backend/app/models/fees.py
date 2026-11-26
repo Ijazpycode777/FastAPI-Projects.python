@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from sqlalchemy import CheckConstraint, Date, ForeignKey, Index, Numeric, String, UniqueConstraint
+from sqlalchemy import CheckConstraint, Date, ForeignKey, Index, Numeric, String, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import Base, TimestampMixin, UUIDPK
@@ -38,7 +38,7 @@ class FeeStructure(UUIDPK, TimestampMixin, Base):
     amount: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
     frequency: Mapped[str] = mapped_column(String(12), nullable=False, default="one_time", server_default="one_time")
     due_after_days: Mapped[int] = mapped_column(nullable=False, default=30, server_default="30")
-    is_active: Mapped[bool] = mapped_column(default=True, server_default="1", nullable=False)
+    is_active: Mapped[bool] = mapped_column(default=True, server_default=text("true"), nullable=False)
 
 
 class FeeInvoice(UUIDPK, TimestampMixin, Base):

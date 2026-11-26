@@ -230,7 +230,10 @@ def _validate_d7_timestamps(bind) -> list[str]:
         if not _has_table(inspector, table) or not _has_col(inspector, table, col):
             continue
         # Only validate if the column is still String (already-DateTime on fresh).
-        if "date" in _col_type_name(inspector, table, col):
+        # PostgreSQL reflects a tz-aware DateTime as type name "timestamp"
+        # (not "datetime"), so the skip guard must recognize both.
+        coltype = _col_type_name(inspector, table, col)
+        if "date" in coltype or "timestamp" in coltype:
             continue
         rows = bind.execute(sa.text(
             f"SELECT id, {col} FROM {table} WHERE {col} IS NOT NULL AND {col} != ''"
@@ -295,7 +298,11 @@ def _d2_history_fk_columns():
             with op.batch_alter_table(table) as b:
                 b.add_column(sa.Column(col, sa.String(36), nullable=True))
                 b.create_foreign_key(
-                    f"fk_history_{col}", [col], [ref], ondelete="SET NULL",
+                    f"fk_history_{col}",
+                    ref,
+                    [col],
+                    ["id"],
+                    ondelete="SET NULL",
                 )
     # Backfill from the text columns. previous_class holds the OLD class_id UUID
     # (captured at promotion), so the copy is reliable — but only where the
@@ -321,52 +328,61 @@ def _d2_history_fk_columns():
         ))
 
 
-# (table, column, server_default expression) — D6. Booleans use 1/0 (portable
-# across PostgreSQL and SQLite boolean storage).
+# (table, column, server_default expression) — D6. Integers use raw numerals;
+# booleans use the SQL keywords true/false (PostgreSQL rejects DEFAULT 1 on a
+# BOOLEAN column; SQLite >= 3.23 accepts true/false as 1/0); strings are quoted
+# literals. See _sd() for the rendering rules.
 _SERVER_DEFAULTS = [
-    ("student_enrolments", "is_active", "1"),
-    ("teacher_assignments", "is_active", "1"),
-    ("grading_policies", "is_active", "0"),
+    ("student_enrolments", "is_active", "true"),
+    ("teacher_assignments", "is_active", "true"),
+    ("grading_policies", "is_active", "false"),
     ("grading_policies", "version", "1"),
-    ("grading_boundaries", "is_pass", "1"),
+    ("grading_boundaries", "is_pass", "true"),
     ("students", "account_status", "active"),
     ("teachers", "designation", "Lecturer"),
     ("teachers", "employment_status", "active"),
     ("guardians", "relationship_type", "Guardian"),
-    ("academic_sessions", "is_active", "0"),
+    ("academic_sessions", "is_active", "false"),
     ("sections", "capacity", "40"),
     ("subjects", "theory_marks", "100"),
     ("subjects", "practical_marks", "0"),
-    ("fee_structures", "is_active", "1"),
+    ("fee_structures", "is_active", "true"),
     ("fee_structures", "frequency", "one_time"),
     ("fee_structures", "due_after_days", "30"),
     ("fee_invoices", "status", "unpaid"),
     ("examinations", "status", "draft"),
     ("student_marks", "marks_obtained", "0"),
-    ("student_marks", "is_absent", "0"),
+    ("student_marks", "is_absent", "false"),
     ("student_marks", "status", "entered"),
-    ("attendance_records", "is_finalized", "0"),
+    ("attendance_records", "is_finalized", "false"),
     ("teacher_attendance", "status", "absent"),
     ("teacher_attendance", "work_minutes", "0"),
     ("leave_records", "person_type", "teacher"),
     ("leave_records", "status", "pending"),
-    ("study_materials", "is_active", "1"),
+    ("study_materials", "is_active", "true"),
     ("study_materials", "storage_backend", "local"),
-    ("timetable_entries", "is_cancelled", "0"),
+    ("timetable_entries", "is_cancelled", "false"),
     ("notices", "target_audience", "all"),
-    ("notices", "is_pinned", "0"),
-    ("users", "is_active", "1"),
-    ("users", "must_reset_password", "0"),
+    ("notices", "is_pinned", "false"),
+    ("users", "is_active", "true"),
+    ("users", "must_reset_password", "false"),
     ("users", "failed_login_attempts", "0"),
 ]
 
 
 def _sd(default: str):
-    """Render a server_default: numeric values raw (``DEFAULT 1``), string values
-    as quoted literals (``DEFAULT 'active'``). ``sa.text`` renders raw, so using
-    it for strings would produce the invalid ``DEFAULT active`` (treated as a
-    column name); a plain string is rendered by SQLAlchemy as a quoted literal."""
-    if default.lstrip("-").isdigit():
+    """Render a server_default: numeric values raw (``DEFAULT 1``), boolean
+    literals raw (``DEFAULT true`` / ``DEFAULT false``), string values as quoted
+    literals (``DEFAULT 'active'``). ``sa.text`` renders raw, so using it for
+    strings would produce the invalid ``DEFAULT active`` (treated as a column
+    name); a plain string is rendered by SQLAlchemy as a quoted literal.
+
+    Booleans MUST use the ``true``/``false`` SQL keywords (not ``1``/``0``):
+    PostgreSQL rejects ``DEFAULT 1`` for a BOOLEAN column with
+    "column is of type boolean but default expression is of type integer".
+    SQLite >= 3.23 accepts ``true``/``false`` as aliases for 1/0, so the keyword
+    form is portable across both dialects."""
+    if default.lstrip("-").isdigit() or default in ("true", "false"):
         return sa.text(default)
     return default
 
@@ -392,7 +408,10 @@ def _d7_timestamps():
     for table, col in targets:
         if not _has_table(inspector, table) or not _has_col(inspector, table, col):
             continue
-        if "date" in _col_type_name(inspector, table, col):
+        # PostgreSQL reflects a tz-aware DateTime as "timestamp" (not
+        # "datetime"); recognize both so already-converted columns are skipped.
+        coltype = _col_type_name(inspector, table, col)
+        if "date" in coltype or "timestamp" in coltype:
             continue  # already DateTime
         # Empty strings -> NULL so the cast cannot fail on them.
         bind.execute(sa.text(f"UPDATE {table} SET {col} = NULL WHERE {col} = ''"))

@@ -18,6 +18,7 @@ from sqlalchemy import (
     Integer,
     String,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -73,7 +74,7 @@ class AttendanceRecord(UUIDPK, TimestampMixin, Base):
         String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     marked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    is_finalized: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", nullable=False)
+    is_finalized: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"), nullable=False)
     note: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     student = relationship("Student", back_populates="attendance")

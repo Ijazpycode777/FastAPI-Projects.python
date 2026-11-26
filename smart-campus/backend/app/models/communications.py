@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, String, Text
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import Base, TimestampMixin, UUIDPK
@@ -56,7 +56,7 @@ class Notice(UUIDPK, TimestampMixin, Base):
         String(36), ForeignKey("sections.id", ondelete="SET NULL"), nullable=True
     )
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    is_pinned: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", nullable=False)
+    is_pinned: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"), nullable=False)
 
     publisher = relationship("User")
 
