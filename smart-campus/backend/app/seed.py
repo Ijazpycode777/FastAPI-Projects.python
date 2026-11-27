@@ -521,20 +521,18 @@ async def seed_demo_data() -> None:
                 reason="Medical leave (fever)", status="approved", approved_by=admin.id,
             )
 
-            # Study material — write a real synthetic PDF so the download
-            # endpoint never advertises a file that does not exist.
-            import io
-            from app.services.storage import get_storage
-            material_key = "materials/seed-algorithms.pdf"
+            # Study material — a real synthetic PDF stored in the database
+            # (file_data) so the download endpoint never advertises a file that
+            # does not exist and the bytes persist with the row until deleted.
             pdf_bytes = _minimal_pdf()
-            get_storage().save(material_key, io.BytesIO(pdf_bytes), "application/pdf")
             await _get_or_create(
                 db, StudyMaterial, [StudyMaterial.title == "Intro to Algorithms — Lecture Notes"],
                 title="Intro to Algorithms — Lecture Notes", description="Week 1-4 notes",
                 class_id=ics_p1.id,
-                uploaded_by=teacher_user.id, storage_backend="local",
-                storage_key=material_key, file_name="algorithms.pdf",
+                uploaded_by=teacher_user.id, storage_backend="db",
+                storage_key="db", file_name="algorithms.pdf",
                 file_size=len(pdf_bytes), content_type="application/pdf", is_active=True,
+                file_data=pdf_bytes,
             )
 
             await db.commit()

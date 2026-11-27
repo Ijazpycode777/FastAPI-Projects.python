@@ -50,15 +50,36 @@ async def list_materials(
     return [StudyMaterialOut.model_validate(r) for r in rows]
 
 
+def _stream(material: StudyMaterial, stream, disposition: str) -> StreamingResponse:
+    """Build a StreamingResponse with a sanitized Content-Disposition.
+
+    ``disposition`` is ``attachment`` (download) or ``inline`` (preview in the
+    browser). The filename is stripped of CR/LF and double quotes so a
+    maliciously-named upload cannot inject header fields.
+    """
+    raw_name = material.file_name or "file"
+    safe_name = "".join(ch for ch in raw_name if ch not in "\r\n\"").strip() or "file"
+    return StreamingResponse(
+        stream,
+        media_type=material.content_type,
+        headers={"Content-Disposition": f'{disposition}; filename="{safe_name}"'},
+    )
+
+
 @router.get("/{material_id}/download")
 async def download(material_id: str, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Download (attachment) — forces the browser to save the file."""
     material, stream = await material_service.download(db, user, material_id)
-    # Sanitize the filename for the Content-Disposition header: strip CR/LF and
-    # double quotes so a maliciously-named upload cannot inject header fields.
-    raw_name = material.file_name or "download"
-    safe_name = "".join(ch for ch in raw_name if ch not in "\r\n\"").strip() or "download"
-    return StreamingResponse(stream, media_type=material.content_type,
-                             headers={"Content-Disposition": f'attachment; filename="{safe_name}"'})
+    return _stream(material, stream, "attachment")
+
+
+@router.get("/{material_id}/preview")
+async def preview(material_id: str, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Preview (inline) — the browser renders the file inline when it can (PDF,
+    images). Shares the same authorization as download (student: own class;
+    teacher: assigned class or own upload; admin: any)."""
+    material, stream = await material_service.download(db, user, material_id)
+    return _stream(material, stream, "inline")
 
 
 @router.delete("/{material_id}", dependencies=[Depends(require_staff())])
@@ -74,6 +95,9 @@ async def delete(material_id: str, user: User = Depends(require_staff()), db: As
         )
         if not (owns or authz):
             raise ForbiddenError("You can only delete materials you uploaded or that target your assigned classes.")
+    # Soft-delete (audit row retained) AND free the stored bytes: the file is
+    # removed from the database when a teacher/admin deletes the material.
     material.is_active = False
+    material.file_data = None
     await db.commit()
     return {"message": "Material removed."}

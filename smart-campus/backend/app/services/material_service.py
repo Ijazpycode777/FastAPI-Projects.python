@@ -1,13 +1,24 @@
-"""Study materials: secure upload, authorized download, metadata persistence."""
+"""Study materials: secure upload, authorized download, metadata persistence.
+
+File bytes are stored in the database (``StudyMaterial.file_data``) so a
+material is retained exactly as uploaded until a teacher or admin deletes it
+(the bytes are nulled on delete; the audit row stays). The ``file_data`` column
+is deferred at the ORM level, so list queries never load every file's bytes;
+the download/preview path explicitly ``undefer``s it for the one row it needs.
+Rows created before the column existed (``file_data`` NULL) keep their bytes in
+local/S3 storage and the download falls back to the storage backend for them.
+"""
 from __future__ import annotations
 
 import os
 import tempfile
+from io import BytesIO
 from typing import BinaryIO
 
 from fastapi import UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import undefer
 
 from app.core.config import settings
 from app.core.exceptions import ForbiddenError, NotFoundError, ValidationError
@@ -17,7 +28,7 @@ from app.models.people import Student
 from app.repositories.audit import record_audit
 from app.services.academic_service import teacher_assigned_to_class
 from app.services.file_validation import FileValidationError, validate_upload_path
-from app.services.storage import get_storage, make_storage_key
+from app.services.storage import get_storage
 
 # Chunk size for bounded upload reading. Small enough that a single read never
 # holds a large buffer, large enough to keep the loop overhead negligible.
@@ -84,7 +95,6 @@ async def upload(
 
     max_bytes = settings.max_upload_mb * 1024 * 1024
     tmp_path: str | None = None
-    storage_key: str | None = None
     try:
         # 1. Bounded read to a temp file — rejects oversize uploads while
         #    reading, never holding more than a chunk in memory.
@@ -96,22 +106,25 @@ async def upload(
         #    content (and includes zip-bomb guards for DOCX/PPTX).
         ext, mime = validate_upload_path(file.filename or "upload", tmp_path)
 
-        # 3. Persist by streaming the temp file to storage (chunked copy via
-        #    shutil.copyfileobj inside LocalStorage.save) — no full RAM load.
-        storage = get_storage()
-        storage_key = make_storage_key(file.filename or f"upload.{ext}")
+        # 3. Read the verified bytes. The temp file is already capped at
+        #    max_bytes, so this read is bounded by the upload limit. The bytes
+        #    are persisted in the database (file_data) so the material is
+        #    durable across storage-volume recycling and is removed only when a
+        #    teacher/admin deletes the material.
         with open(tmp_path, "rb") as fh:
-            storage.save(storage_key, fh, mime)
+            file_data = fh.read()
 
-        # 4. Only after the file is safely stored do we create the DB record.
-        #    The material is scoped to the selected class only (no subject or
-        #    section) — student visibility is filtered by class_id.
+        # 4. Create the DB record with the bytes inline. storage_key/backend are
+        #    retained for backward compatibility with legacy rows (whose bytes
+        #    live in local/S3 storage and whose file_data is NULL); for new
+        #    uploads the bytes are in file_data and storage_key is a placeholder.
         material = StudyMaterial(
             title=title, description=description,
             class_id=class_id,
-            uploaded_by=actor.id, storage_backend=settings_storage_backend(),
-            storage_key=storage_key, file_name=file.filename or f"upload.{ext}",
+            uploaded_by=actor.id, storage_backend="db",
+            storage_key="db", file_name=file.filename or f"upload.{ext}",
             file_size=size, content_type=mime, is_active=True,
+            file_data=file_data,
         )
         db.add(material)
         await db.flush()
@@ -121,20 +134,15 @@ async def upload(
         await db.refresh(material)
         return material
     except FileValidationError as exc:
-        # Invalid file → 422, never 500. No storage save / DB record was made
-        # (validation happens before both). Roll back any pending state.
+        # Invalid file → 422, never 500. No DB record was made (validation
+        # happens before the insert). Roll back any pending state.
         await db.rollback()
         raise ValidationError(str(exc))
     except Exception:
-        # Any other failure (e.g. storage write error, DB commit failure):
-        # roll back the DB and remove any stored file so no partial upload or
-        # orphaned DB row survives.
+        # Any other failure (e.g. DB commit failure): roll back the DB so no
+        # orphaned row survives. There is no storage file to clean up (bytes
+        # are in file_data, rolled back with the row).
         await db.rollback()
-        if storage_key is not None:
-            try:
-                get_storage().delete(storage_key)
-            except Exception:
-                pass
         raise
     finally:
         # The temp file is always cleaned up — success or failure.
@@ -143,11 +151,6 @@ async def upload(
                 os.unlink(tmp_path)
             except OSError:
                 pass
-
-
-def settings_storage_backend() -> str:
-    from app.core.config import settings
-    return settings.storage_backend
 
 
 async def list_for_student(db: AsyncSession, student: Student) -> list[StudyMaterial]:
@@ -169,7 +172,12 @@ async def list_for_student(db: AsyncSession, student: Student) -> list[StudyMate
 
 
 async def download(db: AsyncSession, user, material_id: str) -> tuple[StudyMaterial, BinaryIO]:
-    material = await db.get(StudyMaterial, material_id)
+    # undefer(file_data) so the one row's bytes are loaded in this query; the
+    # list endpoint never loads file_data (deferred at the model level).
+    stmt = select(StudyMaterial).options(undefer(StudyMaterial.file_data)).where(
+        StudyMaterial.id == material_id,
+    )
+    material = (await db.execute(stmt)).scalar_one_or_none()
     if material is None or not material.is_active:
         raise NotFoundError("Study material not found.")
     if user.role == "student":
@@ -183,5 +191,9 @@ async def download(db: AsyncSession, user, material_id: str) -> tuple[StudyMater
         owns = str(getattr(material, "uploaded_by", "")) == str(user.id)
         if not (owns or await teacher_assigned_to_class(db, teacher_id, str(material.class_id))):
             raise ForbiddenError("You are not authorized to download this material.")
+    # New rows store bytes in file_data (DB). Legacy rows (file_data NULL) keep
+    # their bytes in local/S3 storage — fall back to the storage backend.
+    if material.file_data is not None:
+        return material, BytesIO(material.file_data)
     storage = get_storage()
     return material, storage.open(material.storage_key)

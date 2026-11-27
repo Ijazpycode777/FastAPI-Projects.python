@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { BookOpen, Upload, Download } from "lucide-react";
-import { PageHeader, Card, CardHeader, Badge, EmptyState, ErrorState, Modal } from "@/components/common";
+import { BookOpen, Upload, Download, Eye, Trash2 } from "lucide-react";
+import { PageHeader, Card, Badge, EmptyState, ErrorState, Modal } from "@/components/common";
 import { Field, TextInput, Textarea, Select } from "@/components/forms";
 import { http, API_BASE } from "@/lib/api";
 import { useToast } from "@/hooks/useToast";
@@ -9,6 +9,12 @@ import { useAuth } from "@/hooks/useAuth";
 import { usePrograms, useClasses } from "@/features/academicQueries";
 import type { StudyMaterial } from "@/types";
 import { formatDateTime, humanSize } from "@/lib/utils";
+
+/** Browsers can render PDF and images inline; Office formats cannot, so they
+ *  only get a Download button (preview would just download anyway). */
+function isPreviewable(contentType: string): boolean {
+  return contentType === "application/pdf" || contentType.startsWith("image/");
+}
 
 export function MaterialsPage() {
   const { profile } = useAuth();
@@ -38,30 +44,84 @@ export function MaterialsPage() {
     onError: (e: unknown) => toast.error("Upload failed", (e as Error).message),
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => http.del(`/materials/${id}`),
+    onSuccess: () => { toast.success("Material removed"); qc.invalidateQueries({ queryKey: ["materials"] }); },
+    onError: (e: unknown) => toast.error("Could not delete material", (e as Error).message),
+  });
+
+  const onDelete = (m: StudyMaterial) => {
+    if (!confirm(`Delete "${m.title}"? The stored file is removed and the material is hidden from students.`)) return;
+    deleteMutation.mutate(m.id);
+  };
+
   return (
     <div>
       <PageHeader title="Study Materials" description={canUpload ? "Upload and manage educational resources for your classes." : "Download materials shared for your class."}
         action={canUpload ? <button onClick={() => setOpen(true)} className="btn-primary"><Upload size={16} /> Upload</button> : undefined} />
 
-      {isError ? <ErrorState message="Could not load materials." onRetry={() => refetch()} /> : (data?.length ?? 0) === 0 ? <Card><EmptyState icon={BookOpen} title="No materials available" /></Card> : (
+      {isError ? <ErrorState message="Could not load materials." onRetry={() => refetch()} /> : isLoading ? (
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {data?.map((m) => (
-            <Card key={m.id} className="p-5">
-              <div className="flex items-start gap-3">
-                <div className="h-10 w-10 rounded-lg bg-indigo/10 text-indigo grid place-items-center"><BookOpen size={18} /></div>
-                <div className="min-w-0 flex-1">
-                  <p className="font-semibold text-ink truncate">{m.title}</p>
-                  <p className="text-xs text-slate-muted mt-0.5">{m.file_name} · {humanSize(m.file_size)}</p>
-                </div>
-              </div>
-              {m.description && <p className="text-sm text-slate-muted mt-3 line-clamp-2">{m.description}</p>}
-              <div className="flex items-center justify-between mt-4">
-                <Badge>{m.content_type.split("/")[1]?.toUpperCase() ?? "FILE"}</Badge>
-                <button onClick={() => window.open(`${API_BASE}/materials/${m.id}/download`, "_blank")} className="btn-secondary !py-1.5"><Download size={14} /> Download</button>
-              </div>
-              <p className="text-[11px] text-slate-muted mt-3">Uploaded {formatDateTime(m.created_at)}</p>
-            </Card>
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="card p-5 h-44 animate-pulse bg-slate-bg/40" />
           ))}
+        </div>
+      ) : (data?.length ?? 0) === 0 ? <Card><EmptyState icon={BookOpen} title="No materials available" description={canUpload ? "Upload your first study material to share it with your classes." : "Materials shared for your class will appear here."} /></Card> : (
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {data?.map((m) => {
+            const previewable = isPreviewable(m.content_type);
+            return (
+              <Card key={m.id} className="p-5 flex flex-col">
+                {/* Header: icon + title + filename (both truncated so long names
+                    never overflow the card). Delete control for staff sits
+                    top-right so it is reachable but unobtrusive. */}
+                <div className="flex items-start gap-3">
+                  <div className="h-10 w-10 rounded-lg bg-indigo/10 text-indigo grid place-items-center shrink-0">
+                    <BookOpen size={18} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-ink truncate" title={m.title}>{m.title}</p>
+                    <p className="text-xs text-slate-muted mt-0.5 truncate" title={m.file_name}>{m.file_name}</p>
+                  </div>
+                  {canUpload && (
+                    <button onClick={() => onDelete(m)} disabled={deleteMutation.isPending}
+                      className="btn-ghost !px-1.5 !py-1.5 text-slate-muted hover:text-rose shrink-0"
+                      title="Delete material" aria-label="Delete material">
+                      <Trash2 size={15} />
+                    </button>
+                  )}
+                </div>
+
+                {m.description && <p className="text-sm text-slate-muted mt-3 line-clamp-2">{m.description}</p>}
+
+                {/* Meta: file type + size, wrapped (never overflows). */}
+                <div className="flex items-center gap-2 mt-4 flex-wrap">
+                  <Badge>{m.content_type.split("/")[1]?.toUpperCase() ?? "FILE"}</Badge>
+                  <span className="text-xs text-slate-muted">{humanSize(m.file_size)}</span>
+                </div>
+
+                {/* Actions pinned to the card bottom: Preview (inline, for
+                    PDF/images) + Download (attachment). Both full-width split so
+                    they stay within the card on every screen size. */}
+                <div className="flex items-center gap-2 mt-auto pt-3">
+                  {previewable && (
+                    <button type="button"
+                      onClick={() => window.open(`${API_BASE}/materials/${m.id}/preview`, "_blank")}
+                      className="btn-secondary flex-1 inline-flex items-center justify-center gap-1.5">
+                      <Eye size={15} /> Preview
+                    </button>
+                  )}
+                  <a href={`${API_BASE}/materials/${m.id}/download`}
+                    className="btn-primary flex-1 inline-flex items-center justify-center gap-1.5 no-underline"
+                    download>
+                    <Download size={15} /> Download
+                  </a>
+                </div>
+
+                <p className="text-[11px] text-slate-muted mt-3">Uploaded {formatDateTime(m.created_at)}</p>
+              </Card>
+            );
+          })}
         </div>
       )}
 
