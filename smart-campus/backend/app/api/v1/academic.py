@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import ForbiddenError, NotFoundError
 from app.database.session import get_db
 from app.models.academic import (
     AcademicSession,
@@ -25,6 +25,7 @@ from app.schemas.academic import (
     ClassLevelIn,
     ClassLevelOut,
     ClassLevelUpdateIn,
+    ClassRosterOut,
     DepartmentOut,
     ProgramIn,
     ProgramOut,
@@ -36,7 +37,7 @@ from app.schemas.academic import (
     SubjectOut,
     SubjectUpdateIn,
 )
-from app.security.dependencies import get_current_user, require_admin
+from app.security.dependencies import get_current_user, require_admin, require_staff
 from app.services import academic_service
 
 router = APIRouter(tags=["academic"])
@@ -97,6 +98,46 @@ async def class_distribution(admin: User = Depends(require_admin()), db: AsyncSe
     """Aggregated classes view for the Classes Distribution admin page: each
     class with its program, sections, designated subjects and enrolment counts."""
     return await academic_service.list_class_distribution(db)
+
+
+@router.get("/classes/rosters", response_model=list[ClassDistributionOut], dependencies=[Depends(require_staff())])
+async def list_classes_for_roster(user: User = Depends(require_staff()), db: AsyncSession = Depends(get_db)):
+    """Role-aware class listing for the Classes Distribution roster feature.
+
+    Admin: every class. Teacher: only classes with an active teacher assignment.
+    Students are not permitted (require_staff -> 403). The same
+    ClassDistributionOut shape is returned for both roles so the frontend renders
+    one listing component.
+    """
+    return await academic_service.list_classes_for_roster(db, user)
+
+
+@router.get("/classes/{class_id}/roster", response_model=ClassRosterOut, dependencies=[Depends(require_staff())])
+async def get_class_roster(
+    class_id: str,
+    section_id: str | None = Query(None),
+    user: User = Depends(require_staff()),
+    db: AsyncSession = Depends(get_db),
+):
+    """Students currently enrolled in ``class_id`` with a live timetable status.
+
+    Admin: any class. Teacher: only classes they are assigned to -- enforced
+    server-side via ``teacher_assigned_to_class`` (403 otherwise), NOT merely by
+    hiding the class in the UI, so a teacher cannot reach another teacher's
+    roster by editing a URL or API request. Only active enrolments are returned
+    (promoted/transferred students are excluded). ``live_status`` is a real-time
+    timetable indicator, not attendance.
+    """
+    cls = await db.get(ClassLevel, class_id)
+    if cls is None:
+        raise NotFoundError("Class not found.")
+    if user.role == "teacher":
+        teacher = getattr(user, "teacher_profile", None)
+        teacher_id = str(teacher.id) if teacher is not None else None
+        if not teacher_id or not await academic_service.teacher_assigned_to_class(db, teacher_id, class_id):
+            raise ForbiddenError("You can only view rosters for classes you teach.")
+    from app.services.live_status_service import current_now
+    return await academic_service.get_class_roster(db, class_id, section_id, current_now())
 
 
 @router.patch("/classes/{class_id}", response_model=ClassLevelOut, dependencies=[Depends(require_admin())])

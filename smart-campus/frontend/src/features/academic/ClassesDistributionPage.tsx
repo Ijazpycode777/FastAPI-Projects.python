@@ -1,6 +1,7 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
-  Layers, Plus, Trash2, Pencil, Building2, BookOpen, Users, GraduationCap, X, Check,
+  Layers, Plus, Trash2, Pencil, Building2, BookOpen, Users, GraduationCap, X, Check, ArrowRight,
 } from "lucide-react";
 import {
   PageHeader, Card, CardHeader, Badge, EmptyState, ErrorState, Modal, Skeleton,
@@ -8,8 +9,9 @@ import {
 import { Field, TextInput, Select } from "@/components/forms";
 import { ApiError } from "@/lib/api";
 import { useToast } from "@/hooks/useToast";
+import { useAuth } from "@/hooks/useAuth";
 import {
-  useClassDistribution, usePrograms, useAllSubjects, useDepartments,
+  useClassDistribution, useClassRosterList, usePrograms, useAllSubjects, useDepartments,
   useCreateProgram, useDeleteProgram,
   useCreateClass, useUpdateClass, useDeleteClass,
   useCreateSection, useDeleteSection,
@@ -25,9 +27,14 @@ import type { ClassDistribution } from "@/types";
  * are then placed by selecting these rows (by ID) in the student form — so two
  * students in "PB 21" always share the same class row. Departments are the
  * fixed, migration-seeded set (read-only).
+ *
+ * Each class card is selectable: clicking the class name (or "View roster")
+ * opens the live roster at /classes/:id. Teachers get a separate read-only
+ * listing (see ClassTeacherListing) of only their assigned classes.
  */
-export function ClassesDistributionPage() {
+function AdminClassesManagement() {
   const toast = useToast();
+  const navigate = useNavigate();
   const { data: dist, isLoading, isError, refetch } = useClassDistribution();
   const { data: programs } = usePrograms();
   const { data: subjects } = useAllSubjects();
@@ -172,7 +179,9 @@ export function ClassesDistributionPage() {
                            <button onClick={() => setRenaming(null)} className="text-slate-muted hover:text-ink"><X size={16} /></button>
                          </span>
                        ) : (
-                         <p className="font-semibold text-ink">{cls.name}</p>
+                         <button type="button" onClick={() => navigate(`/classes/${cls.id}`)}
+                           className="font-semibold text-ink hover:text-indigo hover:underline text-left"
+                           title="View class roster">{cls.name}</button>
                        )}
                        <Badge>{cls.program_name}</Badge>
                        <span className="text-xs text-slate-muted">Year {cls.year}</span>
@@ -180,6 +189,9 @@ export function ClassesDistributionPage() {
                      </div>
                    </div>
                    <div className="flex items-center gap-1">
+                     <button onClick={() => navigate(`/classes/${cls.id}`)} className="btn-ghost !px-2 text-indigo" title="View roster">
+                       <Users size={15} /><span className="sr-only">View roster</span>
+                     </button>
                      {renaming !== cls.id && (
                        <button onClick={() => { setRenaming(cls.id); setRenameValue(cls.name); }} className="btn-ghost !px-2" title="Rename"><Pencil size={15} /></button>
                      )}
@@ -355,4 +367,76 @@ export function ClassesDistributionPage() {
       </Modal>
     </div>
   );
+}
+
+
+/**
+ * Teacher view of Classes Distribution: a read-only listing of the classes the
+ * teacher is assigned to (via the backend's teacher-class assignment). Each
+ * class is selectable -> opens the live roster. There is no academic-structure
+ * management here (programs/subjects/departments) — that is admin-only.
+ *
+ * The backend `/classes/rosters` endpoint already filters to the teacher's
+ * assigned classes, so even if this component were bypassed the teacher could
+ * not see another teacher's classes; `/classes/:id/roster` 403s unassigned
+ * classes server-side.
+ */
+function ClassTeacherListing() {
+  const navigate = useNavigate();
+  const { data: classes, isLoading, isError, refetch } = useClassRosterList();
+
+  return (
+    <div className="max-w-5xl">
+      <PageHeader
+        title="My Classes"
+        description="The classes you teach. Select a class to view its live roster — students are marked Present while a scheduled lecture is in progress."
+      />
+      <Card>
+        <CardHeader title="Classes" subtitle="Click a class to open its roster." />
+        <div className="p-5">
+          {isError ? <ErrorState message="Could not load your classes." onRetry={() => refetch()} /> :
+           isLoading ? <div className="space-y-3"><Skeleton className="h-24" /><Skeleton className="h-24" /></div> :
+           !classes?.length ? <EmptyState icon={Layers} title="No classes assigned"
+             description="You have no active class assignments for this academic session." /> :
+           <div className="grid gap-3 sm:grid-cols-2">
+             {classes.map((cls) => (
+               <button key={cls.id} type="button" onClick={() => navigate(`/classes/${cls.id}`)}
+                 className="text-left rounded-xl border border-slate-hairline p-4 transition hover:border-indigo/40 hover:shadow-card focus:outline-none focus:ring-2 focus:ring-indigo/30">
+                 <div className="flex items-start justify-between gap-2">
+                   <div className="min-w-0">
+                     <p className="font-semibold text-ink truncate">{cls.name}</p>
+                     <div className="mt-1 flex items-center gap-2 flex-wrap">
+                       <Badge>{cls.program_name}</Badge>
+                       <span className="text-xs text-slate-muted">Year {cls.year}</span>
+                     </div>
+                   </div>
+                   <ArrowRight size={16} className="text-slate-muted mt-1 shrink-0" />
+                 </div>
+                 <div className="mt-3 flex items-center gap-3 text-xs text-slate-muted">
+                   <span className="inline-flex items-center gap-1"><Users size={13} /> {cls.enrolled} enrolled</span>
+                   {cls.sections.length > 0 && (
+                     <span className="inline-flex items-center gap-1">
+                       {cls.sections.map((s) => s.name).join(" · ")}
+                     </span>
+                   )}
+                 </div>
+               </button>
+             ))}
+           </div>}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+
+/**
+ * Classes Distribution entry point. Admins get the full management view
+ * (AdminClassesManagement); teachers get the read-only assigned-classes listing
+ * (ClassTeacherListing). Both branch to /classes/:classId for the roster.
+ */
+export function ClassesDistributionPage() {
+  const { profile } = useAuth();
+  if (profile?.user.role === "teacher") return <ClassTeacherListing />;
+  return <AdminClassesManagement />;
 }

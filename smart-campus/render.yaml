@@ -41,6 +41,11 @@ services:
         value: "true"
       - key: CORS_ALLOWED_ORIGINS
         value: "https://smartcampus.onrender.com"
+      # College timezone for the live Classes Distribution status indicator
+      # (timetable day/time are wall-clock values local to the campus). Override
+      # for a specific campus, e.g. Asia/Kolkata. Defaults to UTC in the app.
+      - key: COLLEGE_TIMEZONE
+        value: UTC
       - key: STORAGE_BACKEND
         value: local
       - key: STORAGE_LOCAL_PATH

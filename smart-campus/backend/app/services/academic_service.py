@@ -11,6 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.exceptions import ConflictError, NotFoundError
 from app.models.academic import (
     AcademicSession,
@@ -226,6 +227,112 @@ async def list_class_distribution(db: AsyncSession) -> list[dict]:
             ],
         })
     return out
+
+
+# ----------------------------------------------------------------------------
+# Classes Distribution roster: role-aware class listing + live-status roster.
+# Reuses list_class_distribution + the teacher assignment helpers above; does
+# NOT duplicate class/student-class relationships.
+# ----------------------------------------------------------------------------
+async def list_classes_for_roster(db: AsyncSession, user) -> list[dict]:
+    """Role-aware class listing for the roster feature.
+
+    Admin: every class (the full distribution view). Teacher: only classes the
+    teacher has an active assignment for. Other roles (students) get an empty
+    list -- the route dependency (require_staff) already 403s them, but this
+    stays safe if called directly. Reuses ``list_class_distribution`` so the
+    shape (program, sections, enrolled counts) is identical for both roles.
+    """
+    full = await list_class_distribution(db)
+    if user.role == "admin":
+        return full
+    if user.role == "teacher":
+        teacher = getattr(user, "teacher_profile", None)
+        teacher_id = str(teacher.id) if teacher is not None else None
+        if teacher_id is None:
+            return []
+        assigns = await list_teacher_assignments(db, teacher_id)
+        allowed = {str(a.class_id) for a in assigns}
+        return [c for c in full if c["id"] in allowed]
+    return []
+
+
+async def get_class_roster(
+    db: AsyncSession, class_id: str, section_id: str | None, now,
+) -> dict:
+    """Currently-enrolled students in ``class_id`` with each student's live
+    timetable status, plus today's lectures + the server time reference.
+
+    Only active enrolments (``StudentEnrolment.is_active=True``) are returned --
+    promoted/transferred students' old enrolments are ``is_active=False`` and are
+    excluded (requirement 2: "Do not include students who previously belonged to
+    the class but have since been promoted, transferred, or moved elsewhere").
+    """
+    from app.services import live_status_service as ls
+
+    cls = await db.get(ClassLevel, class_id)
+    if cls is None:
+        raise NotFoundError("Class not found.")
+    program = await db.get(Program, cls.program_id)
+
+    # Active enrolments for this class -- the authoritative current roster.
+    stmt = (
+        select(StudentEnrolment, Student, Section, AcademicSession)
+        .join(Student, StudentEnrolment.student_id == Student.id)
+        .outerjoin(Section, StudentEnrolment.section_id == Section.id)
+        .outerjoin(AcademicSession, StudentEnrolment.academic_session_id == AcademicSession.id)
+        .where(
+            StudentEnrolment.is_active.is_(True),
+            StudentEnrolment.class_id == class_id,
+        )
+    )
+    if section_id:
+        stmt = stmt.where(StudentEnrolment.section_id == section_id)
+    stmt = stmt.order_by(Section.name, StudentEnrolment.roll_number)
+    rows = (await db.execute(stmt)).all()
+
+    students: list[dict] = []
+    for enrol, student, section, session in rows:
+        status = await ls.compute_live_status(db, enrol, now)
+        students.append({
+            "id": str(student.id),
+            "full_name": student.full_name,
+            "admission_number": student.admission_number,
+            "roll_number": enrol.roll_number,
+            "section_name": section.name if section is not None else None,
+            "session_name": session.name if session is not None else None,
+            "live_status": status,
+        })
+
+    # The enrolment's academic session drives holidays + timetable. In practice
+    # every active enrolment for a class shares the current session; use the
+    # first enrolment's session, falling back to the globally-active session
+    # when the class is empty (so lectures_today is still meaningful for an
+    # empty class the admin is previewing).
+    session_id = rows[0][0].academic_session_id if rows else None
+    if session_id is None:
+        active = (await db.execute(
+            select(AcademicSession).where(AcademicSession.is_active.is_(True))
+        )).scalars().first()
+        session_id = str(active.id) if active is not None else None
+
+    lectures_today: list[dict] = []
+    if session_id is not None:
+        lectures_today = await ls.lectures_for_class_today(db, class_id, session_id, now)
+
+    return {
+        "class_id": str(cls.id),
+        "class_name": cls.name,
+        "program_name": program.name if program is not None else None,
+        "year": cls.year,
+        "students": students,
+        "lectures_today": lectures_today,
+        # Seconds precision so the frontend's transition math is stable; the
+        # college tz offset is preserved so the client can compose lecture
+        # timestamps without trusting its own clock.
+        "server_now": now.replace(microsecond=0).isoformat(),
+        "timezone": settings.college_timezone,
+    }
 
 
 # ----------------------------------------------------------------------------

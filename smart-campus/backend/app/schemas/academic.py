@@ -154,3 +154,42 @@ class ClassDistributionOut(BaseModel):
     enrolled: int
     sections: list[SectionBrief]
     subjects: list[SubjectBrief]
+
+
+# ---------------- Classes Distribution roster (live status) ----------------
+class ClassRosterStudentOut(BaseModel):
+    """One currently-enrolled student on a class roster, with the live
+    timetable-based status indicator. ``live_status`` is "present" when the
+    student's class/section is in a scheduled lecture right now, else "off". It
+    is NOT attendance and never reflects attendance records."""
+    id: str
+    full_name: str
+    admission_number: str
+    roll_number: int
+    section_name: str | None = None
+    session_name: str | None = None
+    live_status: str  # "present" | "off"
+
+
+class ClassRosterLectureOut(BaseModel):
+    """A lecture scheduled for the class today (all sections). Returned so the
+    frontend can schedule a refetch at the next start/end boundary."""
+    start_time: str  # "HH:MM"
+    end_time: str
+    section_id: str | None = None
+    section_name: str | None = None
+    subject_name: str | None = None
+
+
+class ClassRosterOut(BaseModel):
+    """The full roster view for a class: currently-enrolled students with live
+    status, today's lectures, and the server time reference used to compute
+    status (so the client can stay in sync without trusting its own clock)."""
+    class_id: str
+    class_name: str
+    program_name: str | None = None
+    year: int
+    students: list[ClassRosterStudentOut]
+    lectures_today: list[ClassRosterLectureOut]
+    server_now: str  # ISO 8601, college timezone, seconds precision
+    timezone: str

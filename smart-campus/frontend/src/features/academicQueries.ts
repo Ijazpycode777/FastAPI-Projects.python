@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { http } from "@/lib/api";
-import type { AcademicSession, Program, ClassLevel, Section, Subject, Department, ClassDistribution } from "@/types";
+import type { AcademicSession, Program, ClassLevel, Section, Subject, Department, ClassDistribution, ClassRoster } from "@/types";
 
 // ---------------- Reads ----------------
 export const useSessions = () => useQuery({ queryKey: ["sessions"], queryFn: () => http.get<AcademicSession[]>("/sessions") });
@@ -16,6 +16,56 @@ export const useDepartments = () => useQuery({ queryKey: ["departments"], queryF
 /** Aggregated classes view for the Classes Distribution admin page. */
 export const useClassDistribution = () =>
   useQuery({ queryKey: ["classes", "distribution"], queryFn: () => http.get<ClassDistribution[]>("/classes/distribution") });
+
+/** Role-aware class listing for the roster feature. Admin: all classes;
+ *  teacher: only assigned classes. Same ClassDistribution shape as the admin
+ *  management view, so one listing component serves both roles. */
+export const useClassRosterList = () =>
+  useQuery({ queryKey: ["classes", "rosters"], queryFn: () => http.get<ClassDistribution[]>("/classes/rosters") });
+
+/**
+ * Compute the refetch interval for the roster so the live status updates
+ * promptly at lecture start/end without polling every second.
+ *
+ * The backend returns `lectures_today` (today's start/end times for the class)
+ * and `server_now` (ISO in the college timezone). We find the next boundary
+ * strictly after `server_now` and refetch just past it. If no more transitions
+ * are due today, fall back to 60s so a long-open tab still crosses midnight and
+ * picks up the next day's timetable. The interval is clamped to [3s, 60s].
+ */
+export function computeRosterRefetchMs(data: ClassRoster | undefined): number | false {
+  if (!data?.server_now) return 30_000;
+  const now = Date.parse(data.server_now);
+  if (Number.isNaN(now)) return 30_000;
+  // server_now is "YYYY-MM-DDTHH:MM:SS+HH:MM"; reuse its date + offset so the
+  // composed lecture timestamps share the college timezone instead of the
+  // browser's local zone.
+  const day = data.server_now.slice(0, 10);
+  const offset = data.server_now.slice(19) || "+00:00";
+  let next = Infinity;
+  for (const l of data.lectures_today) {
+    const start = Date.parse(`${day}T${l.start_time}:00${offset}`);
+    const end = Date.parse(`${day}T${l.end_time}:00${offset}`);
+    if (!Number.isNaN(start) && start > now) next = Math.min(next, start - now);
+    if (!Number.isNaN(end) && end > now) next = Math.min(next, end - now);
+  }
+  if (!Number.isFinite(next)) return 60_000;
+  // +1s grace past the boundary so the server has flipped the status.
+  return Math.min(60_000, Math.max(3_000, next + 1_000));
+}
+
+/** Class roster with live timetable status. Auto-refreshes at the next lecture
+ *  transition (computed from lectures_today + server_now) so an open tab stays
+ *  current without per-second polling. */
+export function useClassRoster(classId?: string, sectionId?: string) {
+  return useQuery({
+    queryKey: ["classes", "roster", classId, sectionId],
+    queryFn: () => http.get<ClassRoster>(`/classes/${classId}/roster`, { section_id: sectionId }),
+    enabled: !!classId,
+    refetchInterval: (query) => computeRosterRefetchMs(query.state.data),
+    refetchOnWindowFocus: true,
+  });
+}
 
 // ---------------- Mutations ----------------
 // Centralizes cache invalidation: every academic write touches the caches the

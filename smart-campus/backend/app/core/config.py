@@ -72,6 +72,15 @@ class Settings(BaseSettings):
     teacher_late_threshold_minutes: int = 15
     teacher_work_start: str = "08:30"  # HH:MM
 
+    # College timezone (IANA name) used for the live Classes Distribution status
+    # indicator: "is this student's class/section in a scheduled lecture right
+    # now?" is evaluated against the college's wall-clock day/time, not UTC. The
+    # active-session flag + timetable day_of_week/start_time/end_time are all
+    # local to the college. Default UTC so it is correct out-of-the-box for any
+    # server; set COLLEGE_TIMEZONE (e.g. Asia/Kolkata) for a specific campus.
+    # Stored as a config string (not a DB column) so no migration is required.
+    college_timezone: str = "UTC"
+
     # File storage
     storage_backend: str = Field("local", pattern="^(local|s3)$")
     storage_local_path: str = "./storage/materials"

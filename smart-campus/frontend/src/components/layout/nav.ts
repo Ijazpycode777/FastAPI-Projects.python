@@ -20,7 +20,7 @@ export const NAV: NavItem[] = [
   { to: "/students", label: "Student Logs", icon: Users, roles: ["admin"], group: "People" },
   { to: "/teachers", label: "Teacher Logs", icon: GraduationCap, roles: ["admin"], group: "People" },
   { to: "/admins", label: "Administrators", icon: ShieldCheck, roles: ["admin"], group: "People" },
-  { to: "/classes", label: "Classes Distribution", icon: Layers, roles: ["admin"], group: "Academics" },
+  { to: "/classes", label: "Classes Distribution", icon: Layers, roles: ["admin", "teacher"], group: "Academics" },
   { to: "/attendance/mark", label: "Mark Attendance", icon: CalendarCheck, roles: ["teacher"], group: "Academics" },
   { to: "/attendance", label: "Attendance", icon: CalendarCheck, roles: ["admin", "teacher", "student"], group: "Academics" },
   { to: "/examinations", label: "Examinations", icon: FileText, roles: ["admin", "teacher"], group: "Academics" },

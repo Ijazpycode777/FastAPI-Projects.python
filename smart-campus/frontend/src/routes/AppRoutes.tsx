@@ -37,6 +37,7 @@ const InvoiceDetailPage = lazy(() => import("@/features/fees/InvoiceDetailPage")
 const TimetablePage = lazy(() => import("@/features/timetable/TimetablePage").then((m) => ({ default: m.TimetablePage })));
 const MaterialsPage = lazy(() => import("@/features/materials/MaterialsPage").then((m) => ({ default: m.MaterialsPage })));
 const ClassesDistributionPage = lazy(() => import("@/features/academic/ClassesDistributionPage").then((m) => ({ default: m.ClassesDistributionPage })));
+const ClassRosterPage = lazy(() => import("@/features/academic/ClassRosterPage").then((m) => ({ default: m.ClassRosterPage })));
 const NoticesPage = lazy(() => import("@/features/notices/NoticesPage").then((m) => ({ default: m.NoticesPage })));
 const ReportsPage = lazy(() => import("@/features/reports/ReportsPage").then((m) => ({ default: m.ReportsPage })));
 const AdminListPage = lazy(() => import("@/features/admin/AdminListPage").then((m) => ({ default: m.AdminListPage })));
@@ -115,9 +116,12 @@ export function AppRoutes() {
           {/* Timetable, materials, notices, reports */}
           <Route path="timetable" element={<Protected><TimetablePage /></Protected>} />
           <Route path="materials" element={<Protected><MaterialsPage /></Protected>} />
-          {/* Academic structure management (admin only) — build classes/sections/subjects
-              before enrolling students, so placement is by canonical ID, not free text. */}
-          <Route path="classes" element={<Protected roles={["admin"]}><ClassesDistributionPage /></Protected>} />
+          {/* Classes Distribution: role-aware class listing (admin: all +
+              management; teacher: assigned classes only) + per-class roster
+              with a live timetable status indicator. Backend enforces teacher
+              scoping on every roster request regardless of these guards. */}
+          <Route path="classes" element={<Protected roles={["admin", "teacher"]}><ClassesDistributionPage /></Protected>} />
+          <Route path="classes/:classId" element={<Protected roles={["admin", "teacher"]}><ClassRosterPage /></Protected>} />
           <Route path="notices" element={<Protected><NoticesPage /></Protected>} />
           <Route path="reports" element={<Protected roles={["admin", "teacher"]}><ReportsPage /></Protected>} />
         </Route>

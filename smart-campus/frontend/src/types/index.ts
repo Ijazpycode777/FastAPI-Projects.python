@@ -83,6 +83,30 @@ export interface TimetableEntry {
   subject_name?: string; teacher_name?: string;
 }
 
+/** Live, timetable-based status shown on a class roster. "present" means the
+ * student's class/section is in a scheduled lecture right now (server time,
+ * college timezone) — it is NOT attendance. */
+export type LiveStatus = "present" | "off";
+
+export interface ClassRosterStudent {
+  id: string; full_name: string; admission_number: string; roll_number: number;
+  section_name?: string | null; session_name?: string | null;
+  live_status: LiveStatus;
+}
+
+export interface ClassRosterLecture {
+  start_time: string; end_time: string; // "HH:MM"
+  section_id?: string | null; section_name?: string | null; subject_name?: string | null;
+}
+
+export interface ClassRoster {
+  class_id: string; class_name: string; program_name?: string | null; year: number;
+  students: ClassRosterStudent[];
+  lectures_today: ClassRosterLecture[];
+  server_now: string; // ISO 8601 in the college timezone (seconds precision)
+  timezone: string;
+}
+
 export interface AttendanceRecord {
   id: string; student_id: string; status: "present" | "absent" | "late" | "excused";
   attendance_date: string; subject_id: string; class_id: string; section_id?: string | null;
