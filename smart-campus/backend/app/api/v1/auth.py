@@ -14,6 +14,7 @@ from app.schemas.auth import (
     AdminCreateIn,
     CsrfOut,
     LoginIn,
+    LoginOut,
     PasswordChangeIn,
     ProfileOut,
     ResetPasswordOut,
@@ -32,11 +33,15 @@ async def get_csrf(request: Request, response: Response):
     return CsrfOut(csrf_token=token)
 
 
-@router.post("/login", response_model=ProfileOut)
+@router.post("/login", response_model=LoginOut)
 @rate_limit(lambda: settings.login_rate_limit)
 async def login(payload: LoginIn, request: Request, response: Response, db: AsyncSession = Depends(get_db)):
     user, csrf = await auth_service.login(db, request, response, payload.email, payload.password)
-    return _profile(user)
+    # Return the rotated CSRF token so the frontend can sync its in-memory copy
+    # (login rotates the cookie; without this the first mutation sends a stale
+    # token and 403s).
+    profile = _profile(user)
+    return LoginOut(**profile.model_dump(), csrf_token=csrf)
 
 
 @router.post("/logout")

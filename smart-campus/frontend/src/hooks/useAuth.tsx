@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { http } from "@/lib/api";
+import { http, setCsrfToken } from "@/lib/api";
 import type { Profile } from "@/types";
 
 interface AuthContextValue {
@@ -36,7 +36,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [refresh]);
 
   const login = useCallback(async (email: string, password: string) => {
-    const p = await http.post<Profile>("/auth/login", { email, password });
+    const p = await http.post<Profile & { csrf_token?: string }>("/auth/login", { email, password });
+    // The backend rotates the CSRF cookie on login (session-fixation
+    // protection). Sync the in-memory token from the response body so the
+    // first state-changing request sends the correct token -- otherwise it
+    // would send the stale pre-login token, 403, and depend on the
+    // refresh/retry path (which can surface a misleading 'session expired').
+    if (p.csrf_token) setCsrfToken(p.csrf_token);
     setProfile(p);
     // Drop any cached data from a previous session so the new user never sees
     // stale rows belonging to someone else.

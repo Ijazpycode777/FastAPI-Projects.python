@@ -37,6 +37,22 @@ async function refreshCsrf(): Promise<void> {
   }
 }
 
+// Verify the session is genuinely gone before bouncing the user to /login.
+// A 401 on a non-auth endpoint usually means the session expired, but it can
+// also be transient (a CSRF-refresh race, a momentary DB blip). Calling
+// /auth/me here distinguishes the two: if the session is still alive we retry
+// the original request instead of reloading the page -- which is what stops
+// the "submit a form -> immediately back to login" loop when the 401 is not a
+// real expiry.
+async function sessionAlive(): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_BASE}/auth/me`, { method: "GET", credentials: "include" });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 export type RequestOptions = {
   method?: string;
   body?: unknown;
@@ -81,8 +97,22 @@ export async function api<T = unknown>(path: string, opts: RequestOptions = {}):
   }
 
   if (res.status === 401 && !path.startsWith("/auth/")) {
-    // Session expired — surface so the app can redirect to login.
-    throw new ApiError(401, "UNAUTHENTICATED", "Your session has expired. Please sign in again.");
+    // A 401 on a non-auth endpoint usually means the session is gone. But it
+    // can also be transient (e.g. a CSRF-refresh race). Before bouncing the
+    // user to /login, verify with /auth/me: if the session is still alive,
+    // retry the original request once instead of reloading the page. This
+    // stops the "submit a form -> immediately back to login" loop when the 401
+    // is not a real expiry.
+    if (await sessionAlive()) {
+      const retry = await fetch(buildUrl(path, opts.query), init);
+      if (retry.status !== 401) {
+        res = retry; // fall through to the normal success/error handling below
+      } else {
+        throw new ApiError(401, "UNAUTHENTICATED", "Your session has expired. Please sign in again.");
+      }
+    } else {
+      throw new ApiError(401, "UNAUTHENTICATED", "Your session has expired. Please sign in again.");
+    }
   }
 
   if (opts.raw) return res as unknown as T;

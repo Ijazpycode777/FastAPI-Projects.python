@@ -59,6 +59,19 @@ class ProfileOut(BaseModel):
     student: dict | None = None
 
 
+class LoginOut(ProfileOut):
+    """Login response: the user profile PLUS the freshly rotated CSRF token.
+
+    The backend rotates the CSRF cookie on login (session-fixation protection),
+    so the in-memory token the frontend fetched via /auth/csrf before login is
+    now stale relative to the cookie. Returning the new token here lets the
+    frontend sync its in-memory copy immediately -- otherwise the first
+    state-changing request after login sends a stale token, 403s, and depends
+    on the api.ts refresh+retry path (which can surface a misleading
+    'session expired' 401 if the refresh call is blocked or rate-limited)."""
+    csrf_token: str
+
+
 class ResetPasswordOut(BaseModel):
     temporary_password: str
     message: str
